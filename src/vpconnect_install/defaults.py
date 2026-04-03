@@ -32,14 +32,13 @@ REMOTE_WORKDIR = "/root/.vpconnect-install"
 AUTO_SETUP_SET_WIREGUARD = True
 AUTO_SETUP_SET_MTPROXY = True
 AUTO_SETUP_SET_VPMANAGE = True
-# Also apply connection tuning in auto mode (password/port generated if empty)
-AUTO_SETUP_SET_NEW_CONNECT = True
-
 # Generated secrets length (approx)
 SECRET_TOKEN_BYTES = 16
 
-# GitHub repo with remote shell scripts (same filenames as vpconnect_install.remote)
-SCRIPTS_REPO_URL_DEFAULT = "https://github.com/example/vpconnect-remote-scripts"
+# [vp-connect/vpconnect-configure](https://github.com/vp-connect/vpconnect-configure.git) — скрипты 00–03 на сервере
+VPCONFIGURE_REPO_URL_DEFAULT = "https://github.com/vp-connect/vpconnect-configure.git"
+# Ветка для raw.githubusercontent.com при скачивании 00–03 (не настраивается в UI/CLI)
+VPCONFIGURE_RAW_GIT_BRANCH = "main"
 # Path inside that repo before script name (no leading/trailing slash)
 REMOTE_SCRIPTS_REPO_PATH = "remote"
 

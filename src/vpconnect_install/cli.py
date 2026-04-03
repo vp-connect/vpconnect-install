@@ -1,3 +1,9 @@
+"""
+Разбор аргументов командной строки и сборка :class:`~vpconnect_install.config.ProvisionConfig`.
+
+Точка входа CLI — :func:`main` (вызывается из :mod:`vpconnect_install.__main__`).
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -38,7 +44,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--root-private-key",
         default="",
-        help="Path to SSH private key for root (with or instead of password)",
+        help="Path to SSH private key (OpenSSH / PEM)",
     )
     p.add_argument(
         "--root-private-key-passphrase",
@@ -84,9 +90,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="When no domain/key: detect public IP on server (not needed with --auto-setup)",
     )
     p.add_argument(
-        "--scripts-repo-url",
-        default=d.SCRIPTS_REPO_URL_DEFAULT,
-        help="GitHub repo URL with provisioning shell scripts (raw fetch)",
+        "--vpconfigure-repo-url",
+        default=d.VPCONFIGURE_REPO_URL_DEFAULT,
+        help="GitHub repo vpconnect-configure (scripts 00–03, raw branch is always main)",
     )
     p.add_argument(
         "--set-wireguard",
@@ -186,7 +192,7 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
         mtproxy_port=ns.mtproxy_port,
         vpm_http_port=ns.vpm_http_port,
         vpm_password=vpm_pw,
-        scripts_repo_url=(ns.scripts_repo_url or "").strip() or d.SCRIPTS_REPO_URL_DEFAULT,
+        vpconfigure_repo_url=(ns.vpconfigure_repo_url or "").strip() or d.VPCONFIGURE_REPO_URL_DEFAULT,
         git_url=ns.git_url,
         git_branch=ns.git_branch,
         install_path=ns.install_path,

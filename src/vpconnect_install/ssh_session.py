@@ -1,3 +1,7 @@
+"""
+Обёртка над Paramiko: подключение по ключу или паролю, exec, SFTP, потоковый вывод в лог.
+"""
+
 from __future__ import annotations
 
 import socket
@@ -14,12 +18,6 @@ if TYPE_CHECKING:
 LogFn = Callable[[str], None]
 
 
-def _new_ssh_client() -> SSHClient:
-    c = paramiko.SSHClient()
-    c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    return c
-
-
 def _load_private_key(path: str, passphrase: str | None) -> PKey:
     pp = passphrase if passphrase else None
     last_err: Exception | None = None
@@ -34,6 +32,13 @@ def _load_private_key(path: str, passphrase: str | None) -> PKey:
             last_err = e
             continue
     raise ValueError(f"Could not load private key from {path}: {last_err}")
+
+
+def _new_ssh_client() -> SSHClient:
+    """Новый SSHClient с политикой AutoAddPolicy."""
+    c = paramiko.SSHClient()
+    c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    return c
 
 
 class SSHSession:

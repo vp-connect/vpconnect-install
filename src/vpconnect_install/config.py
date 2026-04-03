@@ -1,3 +1,9 @@
+"""
+Модель параметров одного прогона установки (CLI и GUI).
+
+Валидация в :meth:`ProvisionConfig.validate`, автозаполнение в :meth:`ProvisionConfig.apply_auto_setup`.
+"""
+
 from __future__ import annotations
 
 import secrets
@@ -5,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from vpconnect_install import defaults as d
+from vpconnect_install.remote_scripts_fetch import parse_github_repo_url
 
 
 def _port_ok(p: int) -> bool:
@@ -53,8 +60,8 @@ class ProvisionConfig:
     install_path: str = d.INSTALL_PATH
     systemd_service: str = d.SYSTEMD_SERVICE_VPMANAGE
 
-    # Provisioning shell scripts (separate from git_url used by VPManage on server)
-    scripts_repo_url: str = d.SCRIPTS_REPO_URL_DEFAULT
+    # Скрипты 00–03 с GitHub → домашний каталог на сервере, затем по очереди
+    vpconfigure_repo_url: str = d.VPCONFIGURE_REPO_URL_DEFAULT
 
     ssh_connect_timeout: int = d.SSH_CONNECT_TIMEOUT
     command_timeout: int = d.COMMAND_TIMEOUT
@@ -69,21 +76,21 @@ class ProvisionConfig:
             return
         self.domain = None
         self.domain_client_key = ""
-        if d.AUTO_SETUP_SET_NEW_CONNECT:
-            if not self.new_root_password.strip():
-                self.new_root_password = secrets.token_urlsafe(d.SECRET_TOKEN_BYTES)
-            if self.new_ssh_port is None:
-                self.new_ssh_port = 2222
+        # Упрощённый режим: всегда новый пароль, порт 2222, только ключ оператора из артефактов (не поле extra).
+        if not self.new_root_password.strip():
+            self.new_root_password = secrets.token_urlsafe(d.SECRET_TOKEN_BYTES)
+        if self.new_ssh_port is None:
+            self.new_ssh_port = 2222
+        self.new_ssh_public_key = ""
         if self.set_vpmanage and not self.vpm_password.strip():
             self.vpm_password = secrets.token_urlsafe(d.SECRET_TOKEN_BYTES)
 
     def validate(self) -> None:
         _validate_required_ports(self)
         _validate_ssh_credentials(self)
+        _validate_vpconfigure_repo(self)
         if self.set_vpmanage and not self.vpm_password.strip():
-            raise ValueError(
-                "vpm_password is required when set_vpmanage (run apply_auto_setup or set a password)"
-            )
+            raise ValueError("vpm_password is required when set_vpmanage (run apply_auto_setup or set a password)")
         _validate_domain_manual(self)
 
 
@@ -109,6 +116,16 @@ def _validate_ssh_credentials(cfg: ProvisionConfig) -> None:
     has_pw = bool(cfg.root_password)
     if not has_key and not has_pw:
         raise ValueError("Provide root_password and/or a valid root_private_key file path")
+
+
+def _validate_vpconfigure_repo(cfg: ProvisionConfig) -> None:
+    u = (cfg.vpconfigure_repo_url or "").strip()
+    if not u:
+        raise ValueError("vpconfigure_repo_url is required")
+    try:
+        parse_github_repo_url(u)
+    except ValueError as e:
+        raise ValueError(f"vpconfigure_repo_url: {e}") from e
 
 
 def _validate_domain_manual(cfg: ProvisionConfig) -> None:

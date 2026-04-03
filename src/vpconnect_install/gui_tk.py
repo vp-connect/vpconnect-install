@@ -1,24 +1,41 @@
+"""
+Графический интерфейс (Tkinter) для удалённой настройки сервера через vpconnect-install.
+
+Собирает поля ввода в :class:`ProvisionConfig`, запускает :func:`vpconnect_install.runner.run`
+в фоновом потоке и выводит лог; по успеху открывает каталог с артефактами.
+"""
+
 from __future__ import annotations
 
 import queue
 import threading
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from vpconnect_install import defaults as d
 from vpconnect_install.config import ProvisionConfig
+from vpconnect_install.gui_clipboard import (
+    install_text_clipboard_and_context_menu,
+    install_ttk_entry_clipboard_and_context_menu,
+)
+from vpconnect_install.outputs import open_directory_in_file_manager
 from vpconnect_install.runner import run
 
-# Фиксированная высота лога (строки); прокрутка внутри виджета.
-_LOG_LINES = 6
+# Высота лога в строках в расширенном режиме; в упрощённом лог растягивается по вертикали.
+_LOG_LINES_COMPACT = 6
+# Минимум строк лога в упрощённом режиме при растягивании окна
+_LOG_LINES_MIN_STRETCH = 4
 
 
 def _parse_int(entry: ttk.Entry, default: int) -> int:
+    """Целое из поля; пустая строка — ``default``."""
     t = entry.get().strip()
     return int(t) if t else default
 
 
 def _parse_required_ssh_port(entry: ttk.Entry) -> int:
+    """Обязательный SSH-порт: непустое поле, диапазон 1–65535."""
     t = entry.get().strip()
     if not t:
         raise ValueError("Укажите SSH port")
@@ -65,7 +82,7 @@ def _build_config(
     set_domain: bool,
     domain: str,
     domain_client_key: str,
-    scripts_repo_url: str,
+    vpconfigure_repo_url: str,
     set_wg: bool,
     wg_port: int,
     wg_cert: str,
@@ -76,6 +93,7 @@ def _build_config(
     vpm_http: int,
     vpm_pw: str,
 ) -> ProvisionConfig:
+    """Собрать :class:`ProvisionConfig` из значений полей формы (режимы упрощённый/расширенный)."""
     dom = domain.strip() or None
     dkey = domain_client_key.strip()
     if not set_domain:
@@ -96,7 +114,7 @@ def _build_config(
         set_domain=set_domain,
         domain=dom,
         domain_client_key=dkey,
-        scripts_repo_url=scripts_repo_url.strip() or d.SCRIPTS_REPO_URL_DEFAULT,
+        vpconfigure_repo_url=vpconfigure_repo_url.strip() or d.VPCONFIGURE_REPO_URL_DEFAULT,
         set_wireguard=set_wg if not auto_setup else True,
         wg_port=wg_port,
         wg_client_cert_path=wg_cert.strip() or d.WG_CLIENT_CERT_PATH_DEFAULT,
@@ -116,6 +134,8 @@ def _build_config(
 
 
 class ProvisionerGUI:
+    """Окно Tk: ввод параметров, фоновый :func:`~vpconnect_install.runner.run`, лог, открытие каталога артефактов."""
+
     def __init__(self) -> None:
         self.root = tk.Tk()
         self.root.title("vpconnect-install")
@@ -126,15 +146,14 @@ class ProvisionerGUI:
         self.auto_setup_var = tk.BooleanVar(value=True)
 
         frm = ttk.Frame(self.root, padding=8)
+        self.frm = frm
         frm.grid(row=0, column=0, sticky="nsew")
-        self.root.rowconfigure(0, weight=0)
+        self.root.rowconfigure(0, weight=1)
         self.root.columnconfigure(0, weight=1)
         frm.columnconfigure(1, weight=1)
 
         r = 0
-        ttk.Label(frm, text="Debian/Ubuntu server provisioning (SSH)").grid(
-            row=r, column=0, columnspan=2, sticky="w"
-        )
+        ttk.Label(frm, text="Debian/Ubuntu server provisioning (SSH)").grid(row=r, column=0, columnspan=2, sticky="w")
         r += 1
         mode_fr = ttk.Frame(frm)
         mode_fr.grid(row=r, column=0, columnspan=2, sticky="w", pady=4)
@@ -180,14 +199,17 @@ class ProvisionerGUI:
         key_row.columnconfigure(0, weight=1)
         self.root_key = ttk.Entry(key_row, width=36)
         self.root_key.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        ttk.Button(key_row, text="Файл…", command=self._browse_private_key, width=8).grid(
-            row=0, column=1, sticky="e"
-        )
+        ttk.Button(key_row, text="Файл…", command=self._browse_private_key, width=8).grid(row=0, column=1, sticky="e")
         cr += 1
         ttk.Label(conn, text="SSH Key passphrase").grid(row=cr, column=0, sticky="e")
         self.root_key_pp = ttk.Entry(conn, width=42)
         self.root_key_pp.grid(row=cr, column=1, sticky="ew", padx=4)
         _wire_mask_secret_on_blur(self.root_key_pp)
+        cr += 1
+        ttk.Label(conn, text="Репозиторий vpconnect-configure").grid(row=cr, column=0, sticky="ne")
+        self.vpconfigure_repo_ent = ttk.Entry(conn, width=42)
+        self.vpconfigure_repo_ent.insert(0, d.VPCONFIGURE_REPO_URL_DEFAULT)
+        self.vpconfigure_repo_ent.grid(row=cr, column=1, sticky="ew", padx=4)
 
         self.advanced_frame = ttk.Frame(frm)
         self.advanced_frame.grid(row=r, column=0, columnspan=2, sticky="ew", pady=4)
@@ -229,15 +251,6 @@ class ProvisionerGUI:
         self.domain_key_ent = ttk.Entry(domf, width=40, show="*")
         self.domain_key_ent.grid(row=2, column=1, sticky="ew", padx=4)
         self._dom_widgets = [self.domain_ent, self.domain_key_ent]
-        ar += 1
-
-        scrf = ttk.LabelFrame(af, text="Репозиторий скриптов (GitHub)", padding=6)
-        scrf.grid(row=ar, column=0, columnspan=2, sticky="ew", pady=4)
-        scrf.columnconfigure(1, weight=1)
-        ttk.Label(scrf, text="URL репозитория").grid(row=0, column=0, sticky="e")
-        self.scripts_repo_ent = ttk.Entry(scrf, width=48)
-        self.scripts_repo_ent.insert(0, d.SCRIPTS_REPO_URL_DEFAULT)
-        self.scripts_repo_ent.grid(row=0, column=1, sticky="ew", padx=4)
         ar += 1
 
         self.set_wg_var = tk.BooleanVar(value=True)
@@ -296,13 +309,14 @@ class ProvisionerGUI:
         self.btn_start.pack(side="left", padx=4)
         ttk.Button(bf, text="Exit", command=self.root.destroy).pack(side="left", padx=4)
 
+        self._log_frm_row = r
         ttk.Label(frm, text="Log").grid(row=r, column=0, sticky="nw")
-        self.log_widget = scrolledtext.ScrolledText(
-            frm, height=_LOG_LINES, state="disabled", wrap="word"
-        )
-        self.log_widget.grid(row=r, column=1, sticky="ew", padx=4, pady=(4, 6))
+        self.log_widget = scrolledtext.ScrolledText(frm, height=_LOG_LINES_MIN_STRETCH, state="disabled", wrap="word")
+        self.log_widget.grid(row=r, column=1, sticky="nsew", padx=4, pady=4)
 
         self.root.after(200, self._drain_log)
+        install_ttk_entry_clipboard_and_context_menu(self.root)
+        install_text_clipboard_and_context_menu(self.root)
         self._on_mode_change()
 
     def _browse_private_key(self) -> None:
@@ -310,8 +324,8 @@ class ProvisionerGUI:
             parent=self.root,
             title="SSH private key",
             filetypes=[
-                ("Ключи и все файлы", "*"),
-                ("PEM", "*.pem"),
+                ("PEM / OpenSSH", "*.pem"),
+                ("Все файлы", "*.*"),
             ],
         )
         if path:
@@ -343,11 +357,24 @@ class ProvisionerGUI:
         st = "disabled" if not self.set_vpm_var.get() else "!disabled"
         self._state_widgets(self._vpm_widgets, st)
 
+    def _apply_log_layout_mode(self) -> None:
+        """Лишняя высота окна — в области лога (форма сверху не «плавает»).
+
+        В упрощённом и расширенном режиме отличается только минимальная высота лога в строках.
+        """
+        log_row = self._log_frm_row
+        self.frm.rowconfigure(log_row, weight=1)
+        self.log_widget.grid_configure(sticky="nsew", padx=4, pady=4)
+        if self.auto_setup_var.get():
+            self.log_widget.configure(height=_LOG_LINES_MIN_STRETCH)
+        else:
+            self.log_widget.configure(height=_LOG_LINES_COMPACT)
+
     def _on_mode_change(self) -> None:
         auto = self.auto_setup_var.get()
         if auto:
             self.advanced_frame.grid_remove()
-            self.root.minsize(620, 380)
+            self.root.minsize(620, 420)
         else:
             self.advanced_frame.grid()
             self._toggle_nc()
@@ -356,7 +383,9 @@ class ProvisionerGUI:
             self._toggle_mt()
             self._toggle_vpm()
             self.root.minsize(620, 640)
-        self.root.after_idle(self._shrink_wrap_height)
+        self._apply_log_layout_mode()
+        if not auto:
+            self.root.after_idle(self._shrink_wrap_height)
 
     def _shrink_wrap_height(self) -> None:
         """Убирает лишнюю пустоту под логом: высота окна по содержимому."""
@@ -369,6 +398,16 @@ class ProvisionerGUI:
         self.log_widget.configure(state="normal")
         self.log_widget.insert("end", line + "\n")
         self.log_widget.see("end")
+        self.log_widget.configure(state="disabled")
+
+    def _clear_log(self) -> None:
+        try:
+            while True:
+                self._log_q.get_nowait()
+        except queue.Empty:
+            pass
+        self.log_widget.configure(state="normal")
+        self.log_widget.delete("1.0", tk.END)
         self.log_widget.configure(state="disabled")
 
     def _drain_log(self) -> None:
@@ -400,7 +439,7 @@ class ProvisionerGUI:
                 set_domain=self.set_dom_var.get() if not auto else False,
                 domain=self.domain_ent.get(),
                 domain_client_key=self.domain_key_ent.get(),
-                scripts_repo_url=self.scripts_repo_ent.get(),
+                vpconfigure_repo_url=self.vpconfigure_repo_ent.get(),
                 set_wg=self.set_wg_var.get(),
                 wg_port=_parse_int(self.wg_port, d.WG_PORT_DEFAULT),
                 wg_cert=self.wg_cert.get(),
@@ -417,23 +456,34 @@ class ProvisionerGUI:
             messagebox.showerror("Validation", str(e))
             return
 
+        self._clear_log()
         self._running = True
         self.btn_start.state(["disabled"])
 
         def work() -> None:
             try:
-                run(cfg, log=self._log_q.put)
-                self.root.after(0, self._done_ok)
+                artifact_root = run(cfg, log=self._log_q.put)
+                self.root.after(0, lambda r=artifact_root: self._done_ok(r))
             except Exception as ex:
                 err_msg = str(ex)
                 self.root.after(0, lambda m=err_msg: self._done_err(m))
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _done_ok(self) -> None:
+    def _done_ok(self, artifact_root: Path) -> None:
         self._running = False
         self.btn_start.state(["!disabled"])
-        messagebox.showinfo("Done", "Готово.")
+        sep = "=" * 62
+        for _ in range(3):
+            self._log_q.put("")
+        self._log_q.put(sep)
+        self._log_q.put("Установка завершена.")
+        self._log_q.put("")
+        self._log_q.put("Новые доступы, ключи и пароли сохранены в каталоге:")
+        self._log_q.put(f"  {artifact_root.resolve()}")
+        self._log_q.put("")
+        self._log_q.put(sep)
+        open_directory_in_file_manager(artifact_root)
 
     def _done_err(self, msg: str) -> None:
         self._running = False
@@ -441,10 +491,12 @@ class ProvisionerGUI:
         messagebox.showerror("Error", msg)
 
     def run_ui(self) -> None:
+        """Запустить главный цикл Tk (блокирует до закрытия окна)."""
         self.root.mainloop()
 
 
 def main() -> None:
+    """Точка входа GUI: создать :class:`ProvisionerGUI` и показать окно."""
     ProvisionerGUI().run_ui()
 
 

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vpconnect-install"
 dynamic = ["version"]
-description = "SSH provisioner for WireGuard, MTProxy, and SelfVPN-style app on Ubuntu servers"
+description = "SSH provisioning for Debian/Ubuntu: vpconnect-configure (WireGuard, MTProxy, VPManage/selfvpn)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -19,6 +19,7 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "flake8>=6.0",
+    "ruff>=0.8",
 ]
 
 [tool.setuptools.dynamic]
@@ -27,9 +28,13 @@ version = { attr = "vpconnect_install.version.__version__" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-vpconnect_install = ["remote/*.sh"]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

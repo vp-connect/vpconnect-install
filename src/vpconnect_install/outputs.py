@@ -1,6 +1,16 @@
+"""
+Локальные артефакты прогона: каталог ``provision-artifacts``, ключи Ed25519, ACCESS.txt.
+
+Проверка прав на запись до SSH и открытие каталога в файловом менеджере после GUI.
+"""
+
 from __future__ import annotations
 
+import os
 import shlex
+import subprocess
+import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +34,44 @@ class ArtifactBundle:
 def default_artifacts_base(cwd: Path | None = None) -> Path:
     base = cwd or Path.cwd()
     return base / "provision-artifacts"
+
+
+def check_artifacts_base_writable(base: Path, log: Callable[[str], None]) -> None:
+    """
+    Проверка до SSH: в каталог provision-artifacts (или переданный base) можно писать файлы результатов.
+    Иначе в лог — пояснение про потерю доступа к серверу и паролям.
+    """
+    resolved = base.resolve()
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+        probe = resolved / ".vpconnect-install-write-probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except OSError as e:
+        log(
+            "Ошибка! Нет прав на запись в каталог результатов:\n"
+            f"{resolved}\n\n"
+            "Если установка сменит пароль root или параметры SSH, без сохранённых в этом каталоге "
+            "ключей и паролей вы можете потерять доступ к серверу. Новые пароли не будут записаны на диск.\n\n"
+            f"Укажите каталог с правом записи или смените рабочую папку.\nТехническая причина: {e}"
+        )
+        raise RuntimeError("Нет доступа на запись в каталог provision-artifacts. См. сообщение в логе.") from e
+
+
+def open_directory_in_file_manager(path: Path) -> None:
+    """Открыть каталог в проводнике / Finder / файловом менеджере (без ошибок в UI при сбое)."""
+    p = path.resolve()
+    if not p.is_dir():
+        return
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(p))  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(p)], start_new_session=True)  # noqa: S603
+        else:
+            subprocess.Popen(["xdg-open", str(p)], start_new_session=True)  # noqa: S603
+    except OSError:
+        pass
 
 
 def prepare_artifact_dir(config: ProvisionConfig, base: Path | None = None) -> ArtifactBundle:
@@ -83,10 +131,7 @@ def write_access_file(
     """Write ACCESS.txt with connection summary."""
     target = config.effective_domain_or_ip or config.host
     ssh_port = config.new_ssh_port if config.new_ssh_port is not None else config.port
-    ssh_cmd = (
-        f"ssh -i {shlex.quote(str(bundle.private_key_path))} "
-        f"-p {ssh_port} root@{shlex.quote(target)}"
-    )
+    ssh_cmd = f"ssh -i {shlex.quote(str(bundle.private_key_path))} -p {ssh_port} root@{shlex.quote(target)}"
     lines = [
         f"Host: {config.host}",
         f"SSH effective target: {target}",

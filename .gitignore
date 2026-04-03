@@ -26,6 +26,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 vpconnect-configure/
+remote/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -199,12 +200,16 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# Local editor history (not for the repo)
+.history/
+
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+.cursor/
 
 # Marimo
 marimo/_static/

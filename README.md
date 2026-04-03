@@ -1,21 +1,28 @@
 # vpconnect-install
 
-Python tool to provision a **Ubuntu 22.04** (or compatible) server over **SSH**: optional new root password / SSH port / extra `authorized_keys`, **UFW** (enabled only at the **end**), **WireGuard**, **Telegram MTProxy** (systemd unit `mtproxy`), and a **git-based Python app** (VPManage-style, `uvicorn main:app`). Entry points: **CLI**, **Tkinter GUI**, or **PyInstaller** `.exe`.
+Инструмент на **Python 3.10+** для настройки **Debian/Ubuntu** по **SSH**: скачивает и выполняет скрипты репозитория **[vpconnect-configure](https://github.com/vp-connect/vpconnect-configure)** (этапы **00–03** в `$HOME` на сервере, **03** клонирует репозиторий), затем по пути из вывода **03** запускает скрипты **04–08** (подключение/домен, WireGuard, MTProxy, VPManage / selfvpn и финализация). Точки входа: **CLI**, **GUI (Tkinter)**, сборка **PyInstaller** `.exe`.
 
-> **Risk:** Changing SSH port, firewall, or passwords can lock you out. Keep provider **console** access and test on a disposable VM first. There is **no dry-run** mode: a run performs real SSH and remote changes.
+> **Риск.** Смена SSH-порта, firewall или паролей может отрезать доступ. Держите **консоль** провайдера и тестируйте на одноразовой VM. Режима «только посмотреть» нет: выполняются реальные команды на сервере.
 
-## Requirements (operator machine)
+## Требования (машина оператора)
 
 - Python **3.10+**
-- Network access to the server SSH port and (by default) **GitHub** `raw.githubusercontent.com` to download provisioning shell scripts for your app version
+- Доступ к серверу по SSH и к **GitHub** `raw.githubusercontent.com` (скрипты **00–03**), клонирование **vpconfigure** — по URL репозитория (см. `--vpconfigure-repo-url`).
 
-On **Windows**, use **Git Bash** or **WSL** for `bootstrap.sh`, or install Python and use `pip` / `venv`.
+На **Windows** для `bootstrap.sh` удобны **Git Bash** или **WSL**; иначе — `pip` и venv.
 
-## Version and script branch
+## Как устроен прогон
 
-The package version (`vpconnect_install.version.__version__`) selects the **Git branch** in the scripts repository via `scripts_git_branch()` (for example `0.1.0` → `v0.1.0`; versions containing `dev` → `main`). Ensure that branch exists in your scripts repo or downloads fall back to **embedded** copies from the wheel/exe.
+1. **Локально** (до SSH): создаётся каталог артефактов `provision-artifacts/<host>-<timestamp>/`, проверяется право записи; генерируется пара ключей оператора.
+2. **SSH** как root (ключ или пароль).
+3. **Bootstrap** (`configure_bootstrap.py`): для каждого из `00_bashinstall.sh` … `03_getconfigure.sh` — загрузка с GitHub (raw), запуск в домашнем каталоге на сервере.
+4. **03** клонирует **vpconnect-configure**; из stdout извлекается `path:` — каталог установки скриптов **04–08**.
+5. **Провижининг** (`vpconfigure_provision.py`): при необходимости **04** (настройка доступа), затем **05–08** (WireGuard, MTProxy, VPManage и т.д. — в соответствии с флагами конфигурации).
+6. **Локально**: `ACCESS.txt`, файлы с паролями при необходимости, публичный ключ в артефактах.
 
-## Quick start
+Версия пакета и ветка raw для **00–03** задаются в `vpconnect_install/defaults.py` (`VPCONFIGURE_RAW_GIT_BRANCH` и URL репозитория).
+
+## Быстрый старт
 
 ```sh
 ./bootstrap.sh
@@ -25,22 +32,22 @@ python -m vpconnect_install --help
 
 ## CLI
 
-**Authentication:** try `--root-private-key` first, then `ROOT_PASSWORD` / `--root-password`.
+**Аутентификация:** сначала `--root-private-key`, иначе пароль (`--root-password` / `ROOT_PASSWORD`).
 
-**`--auto-setup` (default):** enables WireGuard + MTProxy + VPManage, generates new root password and SSH port **2222** (if not set), uses **public IP on the server** for URLs when no `--domain` / `--domain-client-key`, generates `VPM_PASSWORD` if needed.
+**`--auto-setup` (по умолчанию):** WireGuard + MTProxy + VPManage, новый пароль root, SSH-порт **2222** (если не задан), публичный IP на сервере для URL при отсутствии домена/ключа домена, генерация `VPM_PASSWORD` при пустом значении.
 
-**`--no-auto-setup`:** use `--set-wireguard` / `--set-mtproxy` / `--set-vpmanage` explicitly. Omit `--new-ssh-port` to leave the SSH port unchanged.
+**`--no-auto-setup`:** явно `--set-wireguard` / `--set-mtproxy` / `--set-vpmanage`. Без `--new-ssh-port` порт SSH не меняется.
 
-**Effective host / domain (APP_DOMAIN):**
+**Эффективный хост для URL (домен / IP):**
 
-1. `--domain` (FQDN) if set  
-2. else `--domain-client-key` / `DOMAIN_CLIENT_KEY` — HTTP call to `DOMAIN_CLIENT_SERVICE_URL` (see `defaults.py`)  
-3. else **`--use-public-ip`** or **`--auto-setup`** → detect public IP on the server  
-4. else SSH **host**
+1. `--domain` (FQDN), если задан  
+2. иначе `--domain-client-key` / `DOMAIN_CLIENT_KEY` — HTTP к `DOMAIN_CLIENT_SERVICE_URL` (см. `defaults.py`)  
+3. иначе **`--use-public-ip`** или **`--auto-setup`** — опрос публичного IP на сервере  
+4. иначе SSH **host**
 
-**Scripts repo (separate from VPManage `git clone` on the server):** `--scripts-repo-url` (default in `defaults.SCRIPTS_REPO_URL_DEFAULT`). Scripts are expected under `remote/<name>.sh` in that GitHub repo.
+**Репозиторий vpconnect-configure:** `--vpconfigure-repo-url` (по умолчанию в `defaults.py`).
 
-Example (manual groups, optional new SSH port):
+Пример (расширенный режим, опционально новый SSH-порт):
 
 ```sh
 python -m vpconnect_install --host 203.0.113.10 --no-auto-setup \
@@ -50,7 +57,7 @@ python -m vpconnect_install --host 203.0.113.10 --no-auto-setup \
   --domain example.com
 ```
 
-Environment variables (optional): `ROOT_PASSWORD`, `NEW_ROOT_PASSWORD`, `VPM_PASSWORD`, `ROOT_KEY_PASSPHRASE`, `DOMAIN_CLIENT_KEY`.
+Переменные окружения (опционально): `ROOT_PASSWORD`, `NEW_ROOT_PASSWORD`, `VPM_PASSWORD`, `ROOT_KEY_PASSPHRASE`, `DOMAIN_CLIENT_KEY`.
 
 ## GUI
 
@@ -58,29 +65,22 @@ Environment variables (optional): `ROOT_PASSWORD`, `NEW_ROOT_PASSWORD`, `VPM_PAS
 python -m vpconnect_install gui
 ```
 
-- **Упрощённый** mode: connection fields only; same as `auto_setup`.
-- **Расширенный**: groups (connection tuning, domain, **GitHub scripts repo URL**, WireGuard, MTProxy, VPManage) with enable checkboxes. Domain: FQDN and/or **ключ сервиса домена**; if both empty while «Настроить домен» is on, behavior matches public-IP detection.
+- **Упрощённый** режим: только подключение и URL репозитория; соответствует `auto_setup`.
+- **Расширенный:** блоки (подключение на сервере, домен, WireGuard, MTProxy, VPManage) с чекбоксами.
 
-## Remote flow (no named “phases”)
+По успеху в лог выводится путь к артефактам и открывается каталог в файловом менеджере.
 
-1. `base_ufw_prepare.sh` — `apt update`, `ufw allow …` only (**no** `ufw enable`).
-2. `connect_tune.sh` — optional `chpasswd`, sshd drop-in, `authorized_keys` (**no** `sshd` restart).
-3. Optional: `wireguard_install.sh`, `mtproxy_install.sh`, `vpmanage_install.sh`.
-4. `finalize.sh` — **`systemctl restart ssh`**, **`ufw --force enable`**, then status output (WireGuard, `mtproxy`, `mtproxy.link`, VPManage URL).
+## Локальные артефакты
 
-Bundled copies live under `src/vpconnect_install/remote/`; at runtime the app prefers downloads from the configured GitHub repo (same filenames, under `remote/` in the repo).
+`provision-artifacts/<host>-<timestamp>/`:
 
-## Local artifacts
+- `ACCESS.txt` — сводка, SSH, порты, URL  
+- `credentials_new_root_password.txt` / `credentials_vpm_password.txt` — при необходимости  
+- `id_ed25519` / `id_ed25519.pub` — ключ оператора (публичный добавляется на сервер)
 
-Under `provision-artifacts/<host>-<timestamp>/`:
+## Сборки для распространения
 
-- `ACCESS.txt` — summary, SSH command, ports, URLs.
-- `credentials_new_root_password.txt` / `credentials_vpm_password.txt` when applicable.
-- `id_ed25519` / `id_ed25519.pub` — operator key generated for this run (public key is added on the server).
-
-## Distribution builds
-
-**Windows GUI exe + `readme.txt` + portable source zip** (under `dist/`):
+**Windows: GUI exe, readme, portable zip** в `dist/`:
 
 ```sh
 pip install -r requirements-dev.txt
@@ -88,28 +88,30 @@ pip install -e .
 python packaging/build_distribution.py
 ```
 
-Artifacts:
-
-- `dist/vpconnect-install-gui.exe`
-- `dist/readme.txt` — short notes for the exe
-- `dist/vpconnect-install-portable.zip` — `src/`, `packaging/`, `pyproject.toml`, `README.md`, requirements, `scripts/install_venv.sh`, `scripts/install_venv.bat`
-
-Portable zip: unpack, run `scripts/install_venv.sh` or `install_venv.bat`, then `python -m vpconnect_install gui` or CLI.
-
-PyInstaller only (without full dist script):
+Только PyInstaller:
 
 ```powershell
 pip install -r requirements-dev.txt
 .\scripts\build_gui_exe.ps1
 ```
 
-IntelliJ: run configuration **Build full distribution** (`.run/Build full distribution.run.xml`).
+Portable zip: распаковать, выполнить `scripts/install_venv.sh` или `install_venv.bat`, затем `python -m vpconnect_install gui` или CLI.
 
-## Defaults and tuning
+## Качество кода
 
-Edit [`src/vpconnect_install/defaults.py`](src/vpconnect_install/defaults.py) for VPManage git URL, scripts repo default, domain service URL, install path, default ports, MTProxy unit name, timeouts, and auto-setup behavior.
+```sh
+pip install -r requirements-dev.txt
+ruff check src tests
+ruff format src tests
+flake8 src tests
+pytest
+```
 
-## Tests
+## Настройки по умолчанию
+
+Файл [`src/vpconnect_install/defaults.py`](src/vpconnect_install/defaults.py): URL git VPManage, репозиторий vpconnect-configure, сервис домена, пути на сервере, порты, таймауты, поведение `auto_setup`.
+
+## Тесты
 
 ```sh
 pip install -r requirements-test.txt
