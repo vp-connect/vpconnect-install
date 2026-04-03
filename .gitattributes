@@ -1,0 +1,2 @@
+# Скрипты vpconnect-configure: только LF (CRLF даёт на FreeBSD: set: Illegal option -)
+vpconnect-configure/*.sh text eol=lf

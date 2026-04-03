@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+import shlex
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from vpconnect_install.config import ProvisionConfig
+
+
+@dataclass
+class ArtifactBundle:
+    """Paths and material for one provisioning run."""
+
+    root: Path
+    private_key_path: Path
+    public_key_path: Path
+    public_key_openssh: str
+
+
+def default_artifacts_base(cwd: Path | None = None) -> Path:
+    base = cwd or Path.cwd()
+    return base / "provision-artifacts"
+
+
+def prepare_artifact_dir(config: ProvisionConfig, base: Path | None = None) -> ArtifactBundle:
+    """Create provision-artifacts/<host>-<timestamp>/ and Ed25519 SSH key pair."""
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    safe_host = config.host.replace(":", "_").replace("/", "_")
+    root = (base or default_artifacts_base()) / f"{safe_host}-{ts}"
+    root.mkdir(parents=True, exist_ok=True)
+
+    priv = Ed25519PrivateKey.generate()
+    priv_pem = priv.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    pub = priv.public_key()
+    pub_bytes = pub.public_bytes(
+        encoding=serialization.Encoding.OpenSSH,
+        format=serialization.PublicFormat.OpenSSH,
+    )
+    pub_str = pub_bytes.decode("ascii")
+
+    pk = root / "id_ed25519"
+    pubp = root / "id_ed25519.pub"
+    pk.write_bytes(priv_pem)
+    pubp.write_bytes(pub_bytes + b"\n")
+    try:
+        pk.chmod(0o600)
+    except NotImplementedError:
+        pass
+
+    return ArtifactBundle(
+        root=root,
+        private_key_path=pk,
+        public_key_path=pubp,
+        public_key_openssh=pub_str,
+    )
+
+
+def write_secret_file(bundle: ArtifactBundle, filename: str, content: str) -> Path:
+    p = bundle.root / filename
+    p.write_text(content.strip() + "\n", encoding="utf-8")
+    try:
+        p.chmod(0o600)
+    except NotImplementedError:
+        pass
+    return p
+
+
+def write_access_file(
+    bundle: ArtifactBundle,
+    config: ProvisionConfig,
+    *,
+    mtproxy_secret: str | None = None,
+    wireguard_public_key: str | None = None,
+) -> Path:
+    """Write ACCESS.txt with connection summary."""
+    target = config.effective_domain_or_ip or config.host
+    ssh_port = config.new_ssh_port if config.new_ssh_port is not None else config.port
+    ssh_cmd = (
+        f"ssh -i {shlex.quote(str(bundle.private_key_path))} "
+        f"-p {ssh_port} root@{shlex.quote(target)}"
+    )
+    lines = [
+        f"Host: {config.host}",
+        f"SSH effective target: {target}",
+        f"SSH port: {ssh_port}",
+        f"Operator private key (generated): {bundle.private_key_path}",
+        f"SSH command: {ssh_cmd}",
+        "",
+    ]
+    if config.set_wireguard:
+        lines.append(f"WireGuard UDP port: {config.wg_port}")
+    if config.set_mtproxy:
+        lines.append(f"MTProxy TCP port: {config.mtproxy_port}")
+    if mtproxy_secret:
+        lines.append(f"MTProxy secret (hex): {mtproxy_secret}")
+    if wireguard_public_key:
+        lines.extend(["", "WireGuard server public key:", wireguard_public_key.strip(), ""])
+    if config.set_vpmanage:
+        lines.extend(
+            [
+                f"VPManage HTTP port: {config.vpm_http_port}",
+                f"VPManage URL: http://{target}:{config.vpm_http_port}/",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            f"use_public_ip: {config.use_public_ip}",
+        ]
+    )
+    if config.domain:
+        lines.append(f"Domain (FQDN): {config.domain}")
+    if config.domain_client_key.strip():
+        lines.append("Domain client key: (set)")
+    path = bundle.root / "ACCESS.txt"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
