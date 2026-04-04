@@ -1,8 +1,9 @@
 """
 Графический интерфейс (Tkinter) для удалённой настройки сервера через vpconnect-install.
 
-Собирает поля ввода в :class:`ProvisionConfig`, запускает :func:`vpconnect_install.runner.run`
-в фоновом потоке и выводит лог; по успеху открывает каталог с артефактами.
+Целевая ОС на сервере — одно из семейств vpconnect-configure (debian / centos / freebsd);
+см. README проекта. Собирает поля в :class:`ProvisionConfig`, запускает
+:func:`vpconnect_install.runner.run` в фоновом потоке; по успеху открывает каталог артефактов.
 """
 
 from __future__ import annotations
@@ -153,7 +154,10 @@ class ProvisionerGUI:
         frm.columnconfigure(1, weight=1)
 
         r = 0
-        ttk.Label(frm, text="Debian/Ubuntu server provisioning (SSH)").grid(row=r, column=0, columnspan=2, sticky="w")
+        ttk.Label(
+            frm,
+            text="SSH: сервер — debian / centos / freebsd (vpconnect-configure; подробности в README)",
+        ).grid(row=r, column=0, columnspan=2, sticky="w")
         r += 1
         mode_fr = ttk.Frame(frm)
         mode_fr.grid(row=r, column=0, columnspan=2, sticky="w", pady=4)

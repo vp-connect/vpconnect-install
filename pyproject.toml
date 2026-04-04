@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vpconnect-install"
 dynamic = ["version"]
-description = "SSH provisioning for Debian/Ubuntu: vpconnect-configure (WireGuard, MTProxy, VPManage/selfvpn)"
+description = "SSH provisioning via vpconnect-configure: debian/centos/freebsd targets; WireGuard, MTProxy, VPManage (selfvpn)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

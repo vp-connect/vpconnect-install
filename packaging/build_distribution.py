@@ -32,18 +32,24 @@ def _run_pyinstaller() -> None:
 
 def _write_exe_readme(version: str) -> None:
     DIST.mkdir(parents=True, exist_ok=True)
-    text = f"""vpconnect-install GUI (Windows)
+    text = f"""vpconnect-install GUI (Windows x64)
 
 Version: {version}
 
-This executable provisions a Debian/Ubuntu server over SSH (WireGuard, MTProxy, VPManage).
-Logs appear in the application window; artifacts are written to provision-artifacts/ in the
-current working directory unless you change it in code.
+Requires: Windows 10 or later (64-bit). No separate Python install.
 
-Provisioning shell scripts are downloaded from the configured GitHub repository (branch matches
-app version); if download fails, embedded copies are used.
+This program provisions a server over SSH (WireGuard, MTProxy, VPManage) using vpconnect-
+configure scripts. Target OS is one of three families: debian (Debian/Ubuntu, apt),
+centos (RHEL, Alma, Rocky, Fedora, Amazon Linux 2023+, …), or freebsd. See the main
+README or vpconnect-configure README for exact supported releases.
 
-For CLI and source install, use the portable zip and install_venv scripts.
+Logs appear in the window. Artifacts go to provision-artifacts/ under the current working
+directory (the folder you start the .exe from).
+
+Scripts 00–03 are fetched from GitHub raw; 03 clones the configure repo. Network access
+to GitHub is required.
+
+For CLI or running from source: use the portable zip and install_venv.bat / install_venv.sh.
 """
     (DIST / "readme.txt").write_text(text, encoding="utf-8")
 

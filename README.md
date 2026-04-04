@@ -1,15 +1,35 @@
 # vpconnect-install
 
-Инструмент на **Python 3.10+** для настройки **Debian/Ubuntu** по **SSH**: скачивает и выполняет скрипты репозитория **[vpconnect-configure](https://github.com/vp-connect/vpconnect-configure)** (этапы **00–03** в `$HOME` на сервере, **03** клонирует репозиторий), затем по пути из вывода **03** запускает скрипты **04–08** (подключение/домен, WireGuard, MTProxy, VPManage / selfvpn и финализация). Точки входа: **CLI**, **GUI (Tkinter)**, сборка **PyInstaller** `.exe`.
+Инструмент на **Python 3.10+** для настройки сервера по **SSH**: скачивает и выполняет скрипты **[vpconnect-configure](https://github.com/vp-connect/vpconnect-configure)** (этапы **00–03** в `$HOME` на сервере, **03** клонирует репозиторий), затем по пути из вывода **03** запускает **04–08** (подключение/домен, WireGuard, MTProxy, VPManage / selfvpn и финализация). Точки входа: **CLI**, **GUI (Tkinter)**, сборка **PyInstaller** `.exe`.
 
 > **Риск.** Смена SSH-порта, firewall или паролей может отрезать доступ. Держите **консоль** провайдера и тестируйте на одноразовой VM. Режима «только посмотреть» нет: выполняются реальные команды на сервере.
 
-## Требования (машина оператора)
+## Поддерживаемые версии и платформы
 
-- Python **3.10+**
-- Доступ к серверу по SSH и к **GitHub** `raw.githubusercontent.com` (скрипты **00–03**), клонирование **vpconfigure** — по URL репозитория (см. `--vpconfigure-repo-url`).
+### Машина оператора (CLI и GUI из исходников)
 
-На **Windows** для `bootstrap.sh` удобны **Git Bash** или **WSL**; иначе — `pip` и venv.
+- **Python** ≥ **3.10** (см. `requires-python` в `pyproject.toml`).
+- **ОС:** **Windows** 10/11, **Linux**, **macOS** — везде, где доступны зависимости (`paramiko`, `cryptography`, `requests`) и стандартный **Tkinter** (для GUI; на минимальных установках Linux может понадобиться пакет `python3-tk`).
+- Сеть: SSH до сервера, **GitHub** `raw.githubusercontent.com` (скрипты **00–03**), клонирование репозитория по `--vpconfigure-repo-url`.
+
+Для `./bootstrap.sh` на Windows удобны **Git Bash** или **WSL**; можно обойтись без них, установив Python и venv вручную.
+
+### Сборка GUI `.exe` (дистрибутив)
+
+- **Только 64-bit Windows** 10 или новее; отдельный Python для запуска `.exe` не нужен.
+- Артефакты по умолчанию пишутся в **текущий рабочий каталог** (`provision-artifacts/…`). Краткая справка — в `dist/readme.txt` рядом с exe.
+
+### Целевой сервер (скрипты vpconnect-configure)
+
+На стороне сервера поддержка версий ОС задаётся скриптами **vpconnect-configure** (после `01_getosversion.sh` используется одно из **трёх семейств** — имя ветки `VPCONFIGURE_GIT_BRANCH`):
+
+| Семейство | Суть | Примеры |
+|-----------|------|---------|
+| **debian** | `apt` | Debian 12–13, Ubuntu 22.04 / 24.04 / 26.04 и производные (Linux Mint, Raspberry Pi OS и т.д.) |
+| **centos** | `dnf` / `yum` | RHEL 8–10, AlmaLinux, Rocky Linux, Oracle Linux, Fedora 39+, Amazon Linux 2023+ и аналоги |
+| **freebsd** | пакеты FreeBSD | FreeBSD 13–14 |
+
+Точный список релизов, производных и явных исключений — в [README vpconnect-configure](https://github.com/vp-connect/vpconnect-configure/blob/main/README.md) (в репозитории рядом: `vpconnect-configure/README.md`).
 
 ## Как устроен прогон
 
@@ -31,6 +51,8 @@ python -m vpconnect_install --help
 ```
 
 ## CLI
+
+Кратко о платформах см. в конце вывода **`python -m vpconnect_install --help`** (epilog: Python 3.10+ и три семейства целевой ОС).
 
 **Аутентификация:** сначала `--root-private-key`, иначе пароль (`--root-password` / `ROOT_PASSWORD`).
 
@@ -65,6 +87,8 @@ python -m vpconnect_install --host 203.0.113.10 --no-auto-setup \
 python -m vpconnect_install gui
 ```
 
+Строка под заголовком окна напоминает три семейства целевой ОС; подробности — в разделе **«Поддерживаемые версии и платформы»**.
+
 - **Упрощённый** режим: только подключение и URL репозитория; соответствует `auto_setup`.
 - **Расширенный:** блоки (подключение на сервере, домен, WireGuard, MTProxy, VPManage) с чекбоксами.
 
@@ -79,6 +103,8 @@ python -m vpconnect_install gui
 - `id_ed25519` / `id_ed25519.pub` — ключ оператора (публичный добавляется на сервер)
 
 ## Сборки для распространения
+
+После сборки рядом с **`vpconnect-install-gui.exe`** создаётся **`dist/readme.txt`** — краткая справка для пользователя exe (Windows x64, три семейства целевой ОС, артефакты, сеть).
 
 **Windows: GUI exe, readme, portable zip** в `dist/`:
 

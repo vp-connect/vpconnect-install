@@ -14,6 +14,13 @@ from vpconnect_install import defaults as d
 from vpconnect_install.config import ProvisionConfig
 from vpconnect_install.runner import run
 
+_CLI_EPILOG = (
+    "Supported: Python 3.10+ on Windows, Linux, or macOS. "
+    "Target server: three OS families from vpconnect-configure — "
+    "debian (Debian/Ubuntu, apt), centos (RHEL/Alma/Rocky/Fedora/AL2023…), freebsd. "
+    "Exact OS versions: see vpconnect-configure README."
+)
+
 
 def _read_file(path: str) -> str:
     return Path(path).read_text(encoding="utf-8").strip()
@@ -30,7 +37,8 @@ def _secret(cli_value: str | None, env_name: str, file_arg: str | None) -> str:
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m vpconnect_install",
-        description="Provision Ubuntu server over SSH (WireGuard, MTProxy, VPManage).",
+        description="Provision server over SSH via vpconnect-configure (WireGuard, MTProxy, VPManage).",
+        epilog=_CLI_EPILOG,
     )
     p.add_argument("--host", required=True, help="Server IP or hostname (required)")
     p.add_argument(
