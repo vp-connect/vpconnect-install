@@ -42,18 +42,22 @@ def _log_default(_: str) -> None:
 
 
 def _resolve_public_target(session: SSHSession, config: ProvisionConfig, log: LogFn) -> str:
-    """Определить публичный IPv4 сервера через curl к ifconfig.me / icanhazip; иначе вернуть config.host."""
+    """Определить публичный IPv4: curl -4 и ipv4-сервисы (как 05_setdomain.sh); иначе config.host."""
     cmd = "bash -lc " + shlex.quote(
-        "curl -fsS --max-time 10 https://ifconfig.me 2>/dev/null "
-        "|| curl -fsS --max-time 10 https://icanhazip.com 2>/dev/null "
-        "|| true"
+        r"ip=$(curl -fsS -4 --max-time 10 https://ipv4.icanhazip.com 2>/dev/null | tr -d '\r\n' | head -c 256); "
+        r"[[ -n \"$ip\" && \"$ip\" != *' '* && \"$ip\" != *:* ]] && printf '%s' \"$ip\" && exit 0; "
+        r"ip=$(curl -fsS -4 --max-time 10 https://api.ipify.org 2>/dev/null | tr -d '\r\n' | head -c 256); "
+        r"[[ -n \"$ip\" && \"$ip\" != *' '* && \"$ip\" != *:* ]] && printf '%s' \"$ip\" && exit 0; "
+        r"ip=$(curl -fsS -4 --max-time 10 https://ifconfig.me/ip 2>/dev/null | tr -d '\r\n' | head -c 256); "
+        r"[[ -n \"$ip\" && \"$ip\" != *' '* && \"$ip\" != *:* ]] && printf '%s' \"$ip\" && exit 0; "
+        r"exit 1"
     )
     _code, out, _err = session.exec_command(cmd, timeout=30)
     ip = (out or "").strip()
-    if not ip or " " in ip:
-        log("[Группа: домен] Не удалось получить публичный IP, используем host.")
+    if not ip or " " in ip or ":" in ip:
+        log("[Группа: домен] Не удалось получить публичный IPv4, используем host.")
         return config.host
-    log(f"[Группа: домен] Публичный IP: {ip}")
+    log(f"[Группа: домен] Публичный IPv4: {ip}")
     return ip
 
 
