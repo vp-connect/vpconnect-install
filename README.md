@@ -69,6 +69,8 @@ python -m vpconnect_install --help
 
 **Репозиторий vpconnect-configure:** `--vpconfigure-repo-url` (по умолчанию в `defaults.py`).
 
+Флаги отдельных сценариев на сервере (например, **`07_setmtproxy.sh`**: опциональный **`--mtproxy-secret`** для hex-секрета MTProxy) описаны в [README vpconnect-configure](https://github.com/vp-connect/vpconnect-configure/blob/main/README.md).
+
 Пример (расширенный режим, опционально новый SSH-порт):
 
 ```sh
