@@ -100,7 +100,7 @@ python -m vpconnect_install gui
 
 - `ACCESS.txt` — сводка, SSH, порты, URL  
 - `credentials_new_root_password.txt` / `credentials_vpm_password.txt` — при необходимости  
-- `id_ed25519` / `id_ed25519.pub` — ключ оператора (публичный добавляется на сервер)
+- `id_rsa` / `id_rsa.pub` — RSA-ключ оператора, **2048** бит (публичный добавляется на сервер)
 
 ## Сборки для распространения
 

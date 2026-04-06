@@ -214,8 +214,13 @@ def run_vpconnect_configure_bootstrap(
     session: SSHSession,
     config: ProvisionConfig,
     log: LogFn,
+    *,
+    on_script_ok: Callable[[str], None] | None = None,
 ) -> tuple[str, str, str]:
-    """Скачать 00–03 в $HOME, выполнить 00–03. Возвращает (home, os_branch, configure_dir). При error — стоп."""
+    """Скачать 00–03 в $HOME, выполнить 00–03. Возвращает (home, os_branch, configure_dir). При error — стоп.
+
+    ``on_script_ok`` вызывается после каждого успешно завершённого скрипта (имя файла), чтобы сохранить артефакты.
+    """
     repo = config.vpconfigure_repo_url.strip()
     branch = d.VPCONFIGURE_RAW_GIT_BRANCH
     timeout = min(config.command_timeout, 3600)
@@ -285,6 +290,9 @@ def run_vpconnect_configure_bootstrap(
 
         if _configure_step_failed(status, code):
             abort_configure_on_failure(log, name, message, out, err, line1)
+
+        if on_script_ok:
+            on_script_ok(name)
 
     log("[vpconnect-configure] Шаги 00–03 завершены успешно.")
     assert os_branch is not None

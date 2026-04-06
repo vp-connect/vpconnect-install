@@ -9,6 +9,8 @@ INSTALL_PATH = "/opt/selfvpn"
 SYSTEMD_SERVICE_VPMANAGE = "selfvpn"
 
 # SSH / runner
+# RSA для ключа оператора в provision-artifacts (размер модуля в битах).
+OPERATOR_SSH_RSA_KEY_BITS = 2048
 SSH_CONNECT_TIMEOUT = 30
 COMMAND_TIMEOUT = 3600
 REBOOT_WAIT_TIMEOUT = 300

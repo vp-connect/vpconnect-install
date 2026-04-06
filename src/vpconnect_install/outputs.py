@@ -1,5 +1,5 @@
 """
-Локальные артефакты прогона: каталог ``provision-artifacts``, ключи Ed25519, ACCESS.txt.
+Локальные артефакты прогона: каталог ``provision-artifacts``, RSA-ключ оператора, ACCESS.txt.
 
 Проверка прав на запись до SSH и открытие каталога в файловом менеджере после GUI.
 """
@@ -16,8 +16,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric import rsa
 
+from vpconnect_install import defaults as d
 from vpconnect_install.config import ProvisionConfig
 
 
@@ -29,6 +30,15 @@ class ArtifactBundle:
     private_key_path: Path
     public_key_path: Path
     public_key_openssh: str
+
+
+@dataclass
+class AccessFileState:
+    """Накопление полей для ACCESS.txt между шагами (WireGuard / MTProxy заполняются по мере готовности)."""
+
+    mtproxy_secret: str | None = None
+    wireguard_public_key: str | None = None
+    last_saved_after: str = ""
 
 
 def default_artifacts_base(cwd: Path | None = None) -> Path:
@@ -75,13 +85,13 @@ def open_directory_in_file_manager(path: Path) -> None:
 
 
 def prepare_artifact_dir(config: ProvisionConfig, base: Path | None = None) -> ArtifactBundle:
-    """Create provision-artifacts/<host>-<timestamp>/ and Ed25519 SSH key pair."""
+    """Создать provision-artifacts/<host>-<timestamp>/ и пару OpenSSH RSA (размер — ``OPERATOR_SSH_RSA_KEY_BITS``)."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     safe_host = config.host.replace(":", "_").replace("/", "_")
     root = (base or default_artifacts_base()) / f"{safe_host}-{ts}"
     root.mkdir(parents=True, exist_ok=True)
 
-    priv = Ed25519PrivateKey.generate()
+    priv = rsa.generate_private_key(public_exponent=65537, key_size=d.OPERATOR_SSH_RSA_KEY_BITS)
     priv_pem = priv.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
@@ -94,8 +104,8 @@ def prepare_artifact_dir(config: ProvisionConfig, base: Path | None = None) -> A
     )
     pub_str = pub_bytes.decode("ascii")
 
-    pk = root / "id_ed25519"
-    pubp = root / "id_ed25519.pub"
+    pk = root / "id_rsa"
+    pubp = root / "id_rsa.pub"
     pk.write_bytes(priv_pem)
     pubp.write_bytes(pub_bytes + b"\n")
     try:
@@ -124,11 +134,9 @@ def write_secret_file(bundle: ArtifactBundle, filename: str, content: str) -> Pa
 def write_access_file(
     bundle: ArtifactBundle,
     config: ProvisionConfig,
-    *,
-    mtproxy_secret: str | None = None,
-    wireguard_public_key: str | None = None,
+    state: AccessFileState,
 ) -> Path:
-    """Write ACCESS.txt with connection summary."""
+    """Записать ACCESS.txt из конфигурации и накопленного ``state`` (можно вызывать многократно)."""
     target = config.effective_domain_or_ip or config.host
     ssh_port = config.new_ssh_port if config.new_ssh_port is not None else config.port
     ssh_cmd = f"ssh -i {shlex.quote(str(bundle.private_key_path))} -p {ssh_port} root@{shlex.quote(target)}"
@@ -144,10 +152,10 @@ def write_access_file(
         lines.append(f"WireGuard UDP port: {config.wg_port}")
     if config.set_mtproxy:
         lines.append(f"MTProxy TCP port: {config.mtproxy_port}")
-    if mtproxy_secret:
-        lines.append(f"MTProxy secret (hex): {mtproxy_secret}")
-    if wireguard_public_key:
-        lines.extend(["", "WireGuard server public key:", wireguard_public_key.strip(), ""])
+    if state.mtproxy_secret:
+        lines.append(f"MTProxy secret (hex): {state.mtproxy_secret}")
+    if state.wireguard_public_key:
+        lines.extend(["", "WireGuard server public key:", state.wireguard_public_key.strip(), ""])
     if config.set_vpmanage:
         lines.extend(
             [
@@ -165,6 +173,8 @@ def write_access_file(
         lines.append(f"Domain (FQDN): {config.domain}")
     if config.domain_client_key.strip():
         lines.append("Domain client key: (set)")
+    if state.last_saved_after:
+        lines.extend(["", f"Last artifact save: {state.last_saved_after}"])
     path = bundle.root / "ACCESS.txt"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

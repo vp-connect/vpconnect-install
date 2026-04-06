@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Callable
-from pathlib import Path
+from pathlib import PurePosixPath
 
 from vpconnect_install import defaults as d
 from vpconnect_install.config import ProvisionConfig
@@ -15,10 +15,27 @@ from vpconnect_install.configure_bootstrap import (
     exec_vpconfigure_script,
     parse_configure_result_line,
 )
-from vpconnect_install.outputs import ArtifactBundle
+from vpconnect_install.outputs import AccessFileState, ArtifactBundle
 from vpconnect_install.ssh_session import SSHSession
 
 LogFn = Callable[[str], None]
+
+# Удалённые пути для SFTP всегда в POSIX-виде (на Windows клиенте pathlib.Path даёт обратные слэши).
+_DEFAULT_REMOTE_MTPROXY_SECRET_PATH = str(PurePosixPath("/etc/wireguard/mtproxy_secret.txt"))
+
+
+def _mtproxy_secret_path_from_07_stdout(stdout: str) -> str | None:
+    """Поле mtproxy_secret_path:… в строке result: из stdout 07_setmtproxy.sh."""
+    _st, _msg, _br, line1 = parse_configure_result_line(stdout)
+    if not line1:
+        return None
+    for seg in line1.split(";"):
+        seg = seg.strip()
+        key, sep, val = seg.partition(":")
+        if sep and key.strip().lower() == "mtproxy_secret_path":
+            v = val.strip()
+            return v or None
+    return None
 
 
 def _run_configure_script(
@@ -32,7 +49,7 @@ def _run_configure_script(
     *,
     blank_before: bool,
     extra_env_lines: tuple[str, ...] = (),
-) -> None:
+) -> str:
     if blank_before:
         log("")
     code, out, err = exec_vpconfigure_script(
@@ -52,6 +69,7 @@ def _run_configure_script(
         log(f"[vpconnect-configure] {script_name}: предупреждение — {message}")
     if _configure_step_failed(status, code):
         abort_configure_on_failure(log, script_name, message, out, err, line1)
+    return out
 
 
 def _chmod_remote(
@@ -105,6 +123,8 @@ def run_04_connect_steps(
     bundle: ArtifactBundle,
     log: LogFn,
     timeout: int,
+    *,
+    artifact_persist: Callable[[str], None],
 ) -> None:
     """04_setsystemaccess.sh из configure_dir; вспомогательные файлы — в $HOME.
 
@@ -136,6 +156,7 @@ def run_04_connect_steps(
             blank_before=True,
         )
         session.exec_command(f"rm -f {shlex.quote(pw_file)}", timeout=30)
+        artifact_persist("после 04_setsystemaccess.sh")
         return
 
     if config.new_root_password.strip():
@@ -163,6 +184,7 @@ def run_04_connect_steps(
     )
     if config.new_root_password.strip():
         session.exec_command(f"rm -f {shlex.quote(pw_file)}", timeout=30)
+    artifact_persist("после 04_setsystemaccess.sh")
 
 
 def run_vpconfigure_phases_05_to_08(
@@ -172,11 +194,16 @@ def run_vpconfigure_phases_05_to_08(
     config: ProvisionConfig,
     log: LogFn,
     timeout: int,
-) -> tuple[str | None, str | None]:
-    """05–08 из configure_dir. Перед каждым скриптом — пустая строка в логе."""
+    *,
+    access_state: AccessFileState,
+    artifact_persist: Callable[[str], None],
+) -> None:
+    """05–08 из configure_dir.
+
+    Перед каждым скриптом — пустая строка в логе; артефакты сохраняются после каждого шага.
+    """
     tmo = min(timeout, 3600)
-    wg_pub: str | None = None
-    mt_secret: str | None = None
+    ran_any_step = False
 
     if _need_run_05(config):
         parts: list[str] = ["--persist"]
@@ -199,6 +226,8 @@ def run_vpconfigure_phases_05_to_08(
             blank_before=True,
             extra_env_lines=env,
         )
+        artifact_persist("после 05_setdomain.sh")
+        ran_any_step = True
 
     if config.set_wireguard:
         cert = config.wg_client_cert_path.strip() or d.WG_CLIENT_CERT_PATH_DEFAULT
@@ -222,13 +251,15 @@ def run_vpconfigure_phases_05_to_08(
         pub_remote = f"{cert.rstrip('/')}/wg_server_public.key"
         try:
             raw = session.download_bytes(pub_remote)
-            wg_pub = raw.decode("utf-8", errors="replace").strip()
+            access_state.wireguard_public_key = raw.decode("utf-8", errors="replace").strip()
         except Exception as ex:
             log(f"[vpconnect-configure] Не прочитан публичный ключ WG ({pub_remote}): {ex}")
+        artifact_persist("после 06_setwireguard.sh")
+        ran_any_step = True
 
     if config.set_mtproxy:
         extra = f" --mtproxy-port {int(config.mtproxy_port)} --persist"
-        _run_configure_script(
+        out_07 = _run_configure_script(
             log,
             session,
             configure_dir,
@@ -238,12 +269,14 @@ def run_vpconfigure_phases_05_to_08(
             tmo,
             blank_before=True,
         )
-        sec_path = str(Path("/etc/wireguard") / "mtproxy_secret.txt")
+        sec_path = _mtproxy_secret_path_from_07_stdout(out_07) or _DEFAULT_REMOTE_MTPROXY_SECRET_PATH
         try:
             sec_raw = session.download_bytes(sec_path)
-            mt_secret = sec_raw.decode("utf-8", errors="replace").strip()
+            access_state.mtproxy_secret = sec_raw.decode("utf-8", errors="replace").strip()
         except Exception as ex:
             log(f"[vpconnect-configure] Не прочитан MTProxy secret ({sec_path}): {ex}")
+        artifact_persist("после 07_setmtproxy.sh")
+        ran_any_step = True
 
     if config.set_vpmanage:
         vp_args = [f"--http-port {int(config.vpm_http_port)}", "--persist"]
@@ -260,5 +293,8 @@ def run_vpconfigure_phases_05_to_08(
             tmo,
             blank_before=True,
         )
+        artifact_persist("после 08_setvpmanage.sh")
+        ran_any_step = True
 
-    return wg_pub, mt_secret
+    if not ran_any_step:
+        artifact_persist("шаги 05–08 не запускались (все отключены в конфигурации)")

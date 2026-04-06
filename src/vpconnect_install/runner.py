@@ -16,6 +16,7 @@ from vpconnect_install.config import ProvisionConfig
 from vpconnect_install.configure_bootstrap import run_vpconnect_configure_bootstrap
 from vpconnect_install.domain_client import resolve_domain_fqdn
 from vpconnect_install.outputs import (
+    AccessFileState,
     ArtifactBundle,
     check_artifacts_base_writable,
     default_artifacts_base,
@@ -139,31 +140,32 @@ def _maybe_reconnect_session(
     return _poll_ssh_after_finalize(config, post_port, post_pw, post_key, log)
 
 
-def _write_credential_artifacts(bundle: ArtifactBundle, config: ProvisionConfig, log: LogFn) -> None:
+def _write_credential_artifacts(
+    bundle: ArtifactBundle, config: ProvisionConfig, log: LogFn, *, quiet: bool = False
+) -> None:
     """Записать в bundle сгенерированные пароли (root, VPManage), если они есть."""
     if config.new_root_password.strip():
         write_secret_file(bundle, "credentials_new_root_password.txt", config.new_root_password)
-        log("[Артефакты] Сохранён credentials_new_root_password.txt")
+        if not quiet:
+            log("[Артефакты] Сохранён credentials_new_root_password.txt")
     if config.set_vpmanage and config.vpm_password.strip():
         write_secret_file(bundle, "credentials_vpm_password.txt", config.vpm_password)
-        log("[Артефакты] Сохранён credentials_vpm_password.txt")
+        if not quiet:
+            log("[Артефакты] Сохранён credentials_vpm_password.txt")
 
 
-def _write_summary_artifacts(
+def _persist_run_artifacts(
     bundle: ArtifactBundle,
     config: ProvisionConfig,
-    mtproxy_secret: str | None,
-    wg_pub: str | None,
+    access_state: AccessFileState,
     log: LogFn,
+    label: str,
 ) -> None:
-    """Сформировать ACCESS.txt со сводкой доступов и портов."""
-    write_access_file(
-        bundle,
-        config,
-        mtproxy_secret=mtproxy_secret,
-        wireguard_public_key=wg_pub,
-    )
-    log(f"[Артефакты] Записан {bundle.root / 'ACCESS.txt'}")
+    """Сразу записать файлы паролей и ACCESS.txt (вызывать после каждого значимого шага)."""
+    access_state.last_saved_after = label
+    _write_credential_artifacts(bundle, config, log, quiet=True)
+    write_access_file(bundle, config, access_state)
+    log(f"[Артефакты] Сохранены пароли и ACCESS.txt — {label}")
 
 
 def run(config: ProvisionConfig, log: LogFn | None = None, artifacts_base: Path | None = None) -> Path:
@@ -191,8 +193,12 @@ def run(config: ProvisionConfig, log: LogFn | None = None, artifacts_base: Path 
         connect_timeout=config.ssh_connect_timeout,
         log=lg,
     )
-    mtproxy_secret: str | None = None
-    wg_pub: str | None = None
+    access_state = AccessFileState()
+
+    def artifact_persist(label: str) -> None:
+        _persist_run_artifacts(bundle, config, access_state, lg, label)
+
+    artifact_persist("после создания каталога артефактов и ключей оператора (до SSH)")
 
     try:
         session.connect()
@@ -200,19 +206,42 @@ def run(config: ProvisionConfig, log: LogFn | None = None, artifacts_base: Path 
             f"[Версия] Клиент vpconnect-install {__version__}, "
             f"vpconnect-configure (raw): {d.VPCONFIGURE_RAW_GIT_BRANCH}"
         )
-        home, os_branch, configure_dir = run_vpconnect_configure_bootstrap(session, config, lg)
+        home, os_branch, configure_dir = run_vpconnect_configure_bootstrap(
+            session,
+            config,
+            lg,
+            on_script_ok=lambda name: artifact_persist(f"после {name}"),
+        )
         _apply_effective_host(session, config, lg)
+        artifact_persist("после определения effective host (домен / IP для URL)")
 
         if need_run_04_connect(config):
-            run_04_connect_steps(session, home, configure_dir, os_branch, config, bundle, lg, config.command_timeout)
+            run_04_connect_steps(
+                session,
+                home,
+                configure_dir,
+                os_branch,
+                config,
+                bundle,
+                lg,
+                config.command_timeout,
+                artifact_persist=artifact_persist,
+            )
             session = _maybe_reconnect_session(session, config, lg)
+        else:
+            artifact_persist("04_setsystemaccess.sh не выполнялся (не требуется по конфигурации)")
 
-        wg_pub, mtproxy_secret = run_vpconfigure_phases_05_to_08(
-            session, configure_dir, os_branch, config, lg, config.command_timeout
+        run_vpconfigure_phases_05_to_08(
+            session,
+            configure_dir,
+            os_branch,
+            config,
+            lg,
+            config.command_timeout,
+            access_state=access_state,
+            artifact_persist=artifact_persist,
         )
 
-        _write_credential_artifacts(bundle, config, lg)
-        _write_summary_artifacts(bundle, config, mtproxy_secret, wg_pub, lg)
         return bundle.root
     finally:
         session.close()
