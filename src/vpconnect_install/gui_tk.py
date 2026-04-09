@@ -296,7 +296,7 @@ class ProvisionerGUI:
         ttk.Checkbutton(mtf, text="Установить", variable=self.set_mt_var, command=self._toggle_mt).grid(
             row=0, column=0, sticky="w"
         )
-        ttk.Label(mtf, text="TCP порт").grid(row=1, column=0, sticky="e")
+        ttk.Label(mtf, text="UDP порт").grid(row=1, column=0, sticky="e")
         self.mt_port = ttk.Entry(mtf, width=8)
         self.mt_port.insert(0, str(d.MTPROXY_PORT_DEFAULT))
         self.mt_port.grid(row=1, column=1, sticky="w", padx=4)

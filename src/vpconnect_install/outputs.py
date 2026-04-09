@@ -151,7 +151,7 @@ def write_access_file(
     if config.set_wireguard:
         lines.append(f"WireGuard UDP port: {config.wg_port}")
     if config.set_mtproxy:
-        lines.append(f"MTProxy TCP port: {config.mtproxy_port}")
+        lines.append(f"MTProxy UDP port: {config.mtproxy_port}")
     if state.mtproxy_secret:
         lines.append(f"MTProxy secret (hex): {state.mtproxy_secret}")
     if state.wireguard_public_key:
