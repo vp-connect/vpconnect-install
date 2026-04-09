@@ -101,15 +101,23 @@ def _poll_ssh_after_finalize(
     post_pw: str,
     post_key: str,
     log: LogFn,
+    *,
+    prefer_auth: str = "",
 ) -> SSHSession:
     """Периодически пробовать новое SSH-подключение после смены порта/пароля до таймаута."""
     log("[Подключение] Проверка доступности после смены SSH")
+    key_for_poll = post_key
+    pw_for_poll = post_pw
+    # Если исходно подключались по паролю и пароль поменялся, быстрее и надёжнее пробовать пароль,
+    # не тратя время на (возможную) невалидную попытку ключом.
+    if prefer_auth == "password":
+        key_for_poll = ""
     new_session = SSHSession(
         config.host,
         post_port,
         "root",
-        password=post_pw,
-        private_key_path=post_key,
+        password=pw_for_poll,
+        private_key_path=key_for_poll,
         private_key_passphrase=config.root_private_key_passphrase,
         connect_timeout=config.ssh_connect_timeout,
         log=log,
@@ -140,8 +148,49 @@ def _maybe_reconnect_session(
     need_reconnect = post_port != config.port or bool(config.new_root_password.strip())
     if not need_reconnect:
         return session
+    prefer = "password" if (session.auth_method == "password" and bool(config.new_root_password.strip())) else ""
     session.close()
-    return _poll_ssh_after_finalize(config, post_port, post_pw, post_key, log)
+    return _poll_ssh_after_finalize(config, post_port, post_pw, post_key, log, prefer_auth=prefer)
+
+
+def _request_reboot(session: SSHSession, log: LogFn) -> None:
+    """Запросить перезагрузку сервера (best-effort).
+
+    Важно: не бросаем исключение — установка уже выполнена; если reboot не удалось запросить,
+    просто пишем предупреждение.
+    """
+
+    cmd = "bash -lc " + shlex.quote(
+        "nohup sh -lc '"
+        "command -v systemctl >/dev/null 2>&1 && systemctl reboot && exit 0; "
+        "command -v shutdown >/dev/null 2>&1 && shutdown -r now && exit 0; "
+        "command -v reboot >/dev/null 2>&1 && reboot && exit 0; "
+        "exit 1"
+        "' >/dev/null 2>&1 &"
+    )
+    code, _out, err = session.exec_command(cmd, timeout=30)
+    if code != 0:
+        log(f"[Перезагрузка] Предупреждение: не удалось запросить reboot: {err.strip() or 'unknown error'}")
+    else:
+        log("[Перезагрузка] Перезагрузка запрошена. Ожидаем возврата SSH…")
+
+
+def _poll_ssh_after_reboot(config: ProvisionConfig, log: LogFn, *, prior_auth: str = "") -> None:
+    """Дождаться восстановления SSH после reboot (best-effort)."""
+
+    post_port = config.new_ssh_port if config.new_ssh_port is not None else config.port
+    post_pw = config.new_root_password.strip() or config.root_password
+    post_key = config.root_private_key.strip()
+    try:
+        # После reboot: только если сессия была по паролю и пароль меняли — пробуем только пароль.
+        prefer = "password" if (prior_auth == "password" and bool(config.new_root_password.strip())) else ""
+        s = _poll_ssh_after_finalize(config, post_port, post_pw, post_key, log, prefer_auth=prefer)
+        try:
+            s.close()
+        except Exception:
+            pass
+    except Exception as ex:
+        log(f"[Перезагрузка] Предупреждение: ошибка ожидания SSH после reboot: {ex}")
 
 
 def _write_credential_artifacts(
@@ -246,6 +295,18 @@ def run(config: ProvisionConfig, log: LogFn | None = None, artifacts_base: Path 
             artifact_persist=artifact_persist,
         )
 
+        # Перезагрузка — строго после успешной установки.
+        prior_auth = session.auth_method
+        _request_reboot(session, lg)
+        try:
+            session.close()
+        except Exception:
+            pass
+        _poll_ssh_after_reboot(config, lg, prior_auth=prior_auth)
+
         return bundle.root
     finally:
-        session.close()
+        try:
+            session.close()
+        except Exception:
+            pass
