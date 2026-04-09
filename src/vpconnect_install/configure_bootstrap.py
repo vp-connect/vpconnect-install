@@ -120,7 +120,9 @@ def _fetch_configure_script(repo_url: str, branch: str, name: str, timeout: int)
     url = github_raw_file_url(repo_url, branch, name)
     r = requests.get(url, timeout=timeout)
     r.raise_for_status()
-    return r.content
+    # Normalize line endings to LF: Windows checkouts / downloads may contain CRLF,
+    # which breaks bash on Linux servers ("$'\\r': command not found", "set: pipefail\\r").
+    return r.content.replace(b"\r\n", b"\n")
 
 
 def _remote_home(session: SSHSession, log: LogFn, timeout: int) -> str:
