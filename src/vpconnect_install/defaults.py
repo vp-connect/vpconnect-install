@@ -17,8 +17,8 @@ REBOOT_WAIT_TIMEOUT = 300
 SSH_POLL_INTERVAL = 5
 
 # WireGuard / MTProxy / VPManage default ports
-WG_PORT_DEFAULT = 51820
-MTPROXY_PORT_DEFAULT = 443
+WG_PORT_DEFAULT = 443
+MTPROXY_PORT_DEFAULT = 25
 VPM_HTTP_PORT_DEFAULT = 80
 
 # Server paths for client artifacts (WireGuard)

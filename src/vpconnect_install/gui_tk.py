@@ -27,6 +27,8 @@ from vpconnect_install.runner import run
 _LOG_LINES_COMPACT = 6
 # Минимум строк лога в упрощённом режиме при растягивании окна
 _LOG_LINES_MIN_STRETCH = 4
+# Стартовая ширина колонки с логом (px), плюс ширина левой панели и отступы
+_LOG_COLUMN_STARTUP_PX = 200
 
 
 def _parse_int(entry: ttk.Entry, default: int) -> int:
@@ -155,15 +157,23 @@ class ProvisionerGUI:
         frm.grid(row=0, column=0, sticky="nsew")
         self.root.rowconfigure(0, weight=1)
         self.root.columnconfigure(0, weight=1)
+        # col0: форма фиксированной ширины по содержимому; col1: только лог тянется при ресайзе окна
+        frm.columnconfigure(0, weight=0)
         frm.columnconfigure(1, weight=1)
+        frm.rowconfigure(0, weight=1)
+
+        left_panel = ttk.Frame(frm)
+        self._left_panel = left_panel
+        left_panel.grid(row=0, column=0, sticky="nw", padx=(0, 8))
+        left_panel.columnconfigure(1, weight=1)
 
         r = 0
         ttk.Label(
-            frm,
+            left_panel,
             text="SSH: сервер — debian / centos / freebsd (vpconnect-configure; подробности в README)",
         ).grid(row=r, column=0, columnspan=2, sticky="w")
         r += 1
-        mode_fr = ttk.Frame(frm)
+        mode_fr = ttk.Frame(left_panel)
         mode_fr.grid(row=r, column=0, columnspan=2, sticky="w", pady=4)
         ttk.Label(mode_fr, text="Режим:").pack(side="left", padx=(0, 8))
         ttk.Radiobutton(
@@ -182,7 +192,7 @@ class ProvisionerGUI:
         ).pack(side="left", padx=4)
         r += 1
 
-        conn = ttk.LabelFrame(frm, text="Подключение", padding=6)
+        conn = ttk.LabelFrame(left_panel, text="Подключение", padding=6)
         conn.grid(row=r, column=0, columnspan=2, sticky="ew", pady=4)
         conn.columnconfigure(1, weight=1)
         r += 1
@@ -223,7 +233,7 @@ class ProvisionerGUI:
         self.domain_key_top_ent = ttk.Entry(conn, width=42, textvariable=self.domain_key_var)
         self.domain_key_top_ent.grid(row=cr, column=1, sticky="ew", padx=4)
 
-        self.advanced_frame = ttk.Frame(frm)
+        self.advanced_frame = ttk.Frame(left_panel)
         self.advanced_frame.grid(row=r, column=0, columnspan=2, sticky="ew", pady=4)
         r += 1
         af = self.advanced_frame
@@ -318,22 +328,39 @@ class ProvisionerGUI:
         self.vpm_pw.grid(row=2, column=1, sticky="ew", padx=4)
         self._vpm_widgets = [self.vpm_http, self.vpm_pw]
 
-        bf = ttk.Frame(frm)
+        bf = ttk.Frame(left_panel)
         bf.grid(row=r, column=0, columnspan=2, pady=8)
-        r += 1
         self.btn_start = ttk.Button(bf, text="Start", command=self._on_start)
         self.btn_start.pack(side="left", padx=4)
         ttk.Button(bf, text="Exit", command=self.root.destroy).pack(side="left", padx=4)
 
-        self._log_frm_row = r
-        ttk.Label(frm, text="Log").grid(row=r, column=0, sticky="nw")
-        self.log_widget = scrolledtext.ScrolledText(frm, height=_LOG_LINES_MIN_STRETCH, state="disabled", wrap="word")
-        self.log_widget.grid(row=r, column=1, sticky="nsew", padx=4, pady=4)
+        self.log_outer = ttk.Frame(frm)
+        self.log_outer.grid(row=0, column=1, sticky="nsew")
+        self.log_outer.columnconfigure(0, weight=1)
+        self.log_outer.rowconfigure(1, weight=1)
+        ttk.Label(self.log_outer, text="Log").grid(row=0, column=0, sticky="nw")
+        self.log_widget = scrolledtext.ScrolledText(
+            self.log_outer, height=_LOG_LINES_MIN_STRETCH, state="disabled", wrap="word"
+        )
+        self.log_widget.grid(row=1, column=0, sticky="nsew", pady=(0, 4))
 
         self.root.after(200, self._drain_log)
         install_ttk_entry_clipboard_and_context_menu(self.root)
         install_text_clipboard_and_context_menu(self.root)
         self._on_mode_change()
+        self._capture_and_apply_startup_geometry()
+
+    def _capture_and_apply_startup_geometry(self) -> None:
+        """Узкая колонка лога при первом показе; размер авто-режима для возврата с «Расширенный»."""
+        self.root.update_idletasks()
+        left_w = self._left_panel.winfo_reqwidth()
+        # padding frm (~16) + зазор между колонками (8)
+        extra = 24
+        min_w, min_h = self.root.minsize()
+        init_w = max(left_w + _LOG_COLUMN_STARTUP_PX + extra, min_w)
+        init_h = max(self.root.winfo_reqheight(), min_h)
+        self._initial_auto_size = (init_w, init_h)
+        self.root.geometry(f"{init_w}x{init_h}")
 
     def _browse_private_key(self) -> None:
         path = filedialog.askopenfilename(
@@ -378,13 +405,12 @@ class ProvisionerGUI:
         self._state_widgets(self._vpm_widgets, st)
 
     def _apply_log_layout_mode(self) -> None:
-        """Лишняя высота окна — в области лога (форма сверху не «плавает»).
+        """Вертикальное растяжение окна — только колонка с логом (правая).
 
         В упрощённом и расширенном режиме отличается только минимальная высота лога в строках.
         """
-        log_row = self._log_frm_row
-        self.frm.rowconfigure(log_row, weight=1)
-        self.log_widget.grid_configure(sticky="nsew", padx=4, pady=4)
+        self.log_outer.rowconfigure(1, weight=1)
+        self.log_widget.grid_configure(sticky="nsew", pady=(0, 4))
         if self.auto_setup_var.get():
             self.log_widget.configure(height=_LOG_LINES_MIN_STRETCH)
         else:
@@ -395,6 +421,13 @@ class ProvisionerGUI:
         if auto:
             self.advanced_frame.grid_remove()
             self.root.minsize(620, 420)
+            self.root.update_idletasks()
+            if hasattr(self, "_initial_auto_size"):
+                init_w, init_h = self._initial_auto_size
+                cur_w = self.root.winfo_width()
+                if cur_w <= 1:
+                    cur_w = init_w
+                self.root.geometry(f"{cur_w}x{init_h}")
         else:
             self.advanced_frame.grid()
             self._toggle_nc()
@@ -408,10 +441,12 @@ class ProvisionerGUI:
             self.root.after_idle(self._shrink_wrap_height)
 
     def _shrink_wrap_height(self) -> None:
-        """Убирает лишнюю пустоту под логом: высота окна по содержимому."""
+        """При смене режима подогнать только высоту окна; ширину не меняем."""
         self.root.update_idletasks()
         req_h = self.root.winfo_reqheight()
-        cur_w = max(self.root.winfo_width(), self.root.winfo_reqwidth())
+        cur_w = self.root.winfo_width()
+        if cur_w <= 1:
+            cur_w = max(self.root.winfo_reqwidth(), 620)
         self.root.geometry(f"{cur_w}x{req_h}")
 
     def _append_log(self, line: str) -> None:
