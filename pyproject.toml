@@ -32,6 +32,17 @@ where = ["src"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 
+# Tk-модули: юнит-тесты есть, но стабильный headless-прогон зависит от Tcl/Tk; в метриках покрытия считаем только «не-GUI» слой.
+[tool.coverage.run]
+source = ["src"]
+omit = ["**/gui_clipboard.py", "**/gui_tk.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"

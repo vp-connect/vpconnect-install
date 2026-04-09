@@ -15,6 +15,102 @@ DIST = REPO_ROOT / "dist"
 ZIP_NAME = "vpconnect-install-portable.zip"
 
 
+def _gui_artifact_basename() -> str:
+    """Имя собранного бинарника PyInstaller на текущей ОС (на Windows — с .exe)."""
+    return "vpconnect-install-gui.exe" if sys.platform == "win32" else "vpconnect-install-gui"
+
+
+def _readme_common_body() -> str:
+    """Общий текст про провижининг и сеть (без привязки к ОС сборки)."""
+    return """\
+This tool provisions a server over SSH (WireGuard, MTProxy, VPManage) using vpconnect-
+configure scripts. The target server OS is one of three families: debian (Debian/Ubuntu),
+centos (RHEL, Alma, Rocky, Fedora, Amazon Linux 2023+, …), or freebsd. See the main
+README or vpconnect-configure README for exact supported releases.
+
+Scripts 00–03 are fetched from GitHub raw; 03 clones the configure repo. Network access
+to GitHub is required.
+"""
+
+
+def _write_dist_readme(version: str, *, skip_pyinstaller: bool) -> None:
+    """Текст readme.txt зависит от ОС, на которой запущен build_distribution.py."""
+    DIST.mkdir(parents=True, exist_ok=True)
+    gui_name = _gui_artifact_basename()
+    zip_line = (
+        f"- {ZIP_NAME} — source tree + scripts; bootstrap per OS, then run (see README.md)."
+    )
+    pyi_note = (
+        f"- {gui_name} — GUI built with PyInstaller on this machine (no separate Python to run it)."
+        if not skip_pyinstaller
+        else "- (PyInstaller was skipped for this run; there is no frozen GUI binary in dist/.)"
+    )
+
+    if sys.platform == "win32":
+        body = f"""vpconnect-install distribution (built on Windows)
+
+Version: {version}
+
+Contents of this folder:
+{pyi_note}
+{zip_line}
+- readme.txt — this file.
+
+When you run the GUI executable, logs appear in the window. Artifacts are written to
+provision-artifacts/ under the current working directory (the folder you start the program from).
+
+{_readme_common_body()}
+From the portable zip on Windows: unpack, then run scripts\\windows\\cmd\\bootstrap.bat or
+scripts\\windows\\ps\\bootstrap.ps1, then:
+  python -m vpconnect_install gui
+  python -m vpconnect_install --help
+"""
+
+    elif sys.platform == "darwin":
+        body = f"""vpconnect-install distribution (built on macOS)
+
+Version: {version}
+
+Contents of this folder:
+{pyi_note}
+{zip_line}
+- readme.txt — this file.
+
+{_readme_common_body()}
+On this Mac, set up a venv from the repo or zip: ./bootstrap.sh or scripts/macos/bootstrap.sh,
+then: python -m vpconnect_install gui (or CLI). Artifacts: provision-artifacts/ under the cwd.
+
+A Windows-only .exe for operators without Python is produced when you run
+packaging/build_distribution.py on a 64-bit Windows machine (see README.md).
+
+From the portable zip on other systems, use scripts/linux/ or scripts/windows/… as in README.md.
+"""
+
+    else:
+        # Linux and other POSIX (e.g. WSL reports linux)
+        body = f"""vpconnect-install distribution (built on Linux)
+
+Version: {version}
+
+Contents of this folder:
+{pyi_note}
+{zip_line}
+- readme.txt — this file.
+
+{_readme_common_body()}
+On this machine: ./bootstrap.sh or scripts/linux/bootstrap.sh, then:
+  python -m vpconnect_install gui
+Artifacts go to provision-artifacts/ under the current working directory.
+
+A Windows .exe for users without Python is produced when packaging/build_distribution.py
+is run on Windows (see README.md).
+
+From the portable zip on macOS or Windows, follow README.md (scripts/macos or scripts/windows).
+"""
+
+    (DIST / "readme.txt").write_text(body, encoding="utf-8")
+
+
 def _run_pyinstaller() -> None:
     cmd = [
         sys.executable,
@@ -30,40 +126,20 @@ def _run_pyinstaller() -> None:
     subprocess.run(cmd, cwd=REPO_ROOT, check=True)
 
 
-def _write_exe_readme(version: str) -> None:
-    DIST.mkdir(parents=True, exist_ok=True)
-    text = f"""vpconnect-install GUI (Windows x64)
-
-Version: {version}
-
-Requires: Windows 10 or later (64-bit). No separate Python install.
-
-This program provisions a server over SSH (WireGuard, MTProxy, VPManage) using vpconnect-
-configure scripts. Target OS is one of three families: debian (Debian/Ubuntu, apt),
-centos (RHEL, Alma, Rocky, Fedora, Amazon Linux 2023+, …), or freebsd. See the main
-README or vpconnect-configure README for exact supported releases.
-
-Logs appear in the window. Artifacts go to provision-artifacts/ under the current working
-directory (the folder you start the .exe from).
-
-Scripts 00–03 are fetched from GitHub raw; 03 clones the configure repo. Network access
-to GitHub is required.
-
-For CLI or running from source: use the portable zip and install_venv.bat / install_venv.sh.
-"""
-    (DIST / "readme.txt").write_text(text, encoding="utf-8")
-
-
 def _portable_zip_paths() -> list[Path]:
-    include_dirs = [REPO_ROOT / "src", REPO_ROOT / "packaging"]
+    include_dirs = [
+        REPO_ROOT / "src",
+        REPO_ROOT / "packaging",
+        REPO_ROOT / "scripts",
+    ]
     files = [
         REPO_ROOT / "pyproject.toml",
         REPO_ROOT / "README.md",
         REPO_ROOT / "LICENSE",
         REPO_ROOT / "requirements.txt",
         REPO_ROOT / "requirements-dev.txt",
-        REPO_ROOT / "scripts" / "install_venv.sh",
-        REPO_ROOT / "scripts" / "install_venv.bat",
+        REPO_ROOT / "bootstrap.sh",
+        REPO_ROOT / "bootstrap-dist.sh",
     ]
     out: list[Path] = []
     for d in include_dirs:
@@ -111,11 +187,12 @@ def main() -> int:
 
     if not args.skip_pyinstaller:
         _run_pyinstaller()
-    _write_exe_readme(ver)
+    _write_dist_readme(ver, skip_pyinstaller=args.skip_pyinstaller)
     _write_portable_zip()
     print(f"Done. Outputs under {DIST}:", flush=True)
-    print("  - vpconnect-install-gui.exe", flush=True)
-    print("  - readme.txt", flush=True)
+    if not args.skip_pyinstaller:
+        print(f"  - {_gui_artifact_basename()}", flush=True)
+    print("  - readme.txt (text depends on build host OS)", flush=True)
     print(f"  - {ZIP_NAME}", flush=True)
     return 0
 

@@ -23,10 +23,12 @@ _CLI_EPILOG = (
 
 
 def _read_file(path: str) -> str:
+    """Прочитать текстовый файл и вернуть содержимое без пробелов по краям."""
     return Path(path).read_text(encoding="utf-8").strip()
 
 
 def _secret(cli_value: str | None, env_name: str, file_arg: str | None) -> str:
+    """Секрет: аргумент CLI, иначе файл ``file_arg``, иначе переменная окружения ``env_name``."""
     if cli_value:
         return cli_value
     if file_arg:
@@ -34,7 +36,24 @@ def _secret(cli_value: str | None, env_name: str, file_arg: str | None) -> str:
     return os.environ.get(env_name, "").strip()
 
 
+def _feature_flags_from_ns(ns: argparse.Namespace) -> tuple[bool, bool, bool]:
+    """Флаги WireGuard / MTProxy / VPManage с учётом ``--auto-setup`` и ``--no-*`` по умолчанию."""
+    wg, mt, vpm = ns.set_wireguard, ns.set_mtproxy, ns.set_vpmanage
+    if not ns.auto_setup:
+        return (
+            False if wg is None else bool(wg),
+            False if mt is None else bool(mt),
+            False if vpm is None else bool(vpm),
+        )
+    return (
+        True if wg is None else bool(wg),
+        True if mt is None else bool(mt),
+        True if vpm is None else bool(vpm),
+    )
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
+    """Парсер аргументов для ``python -m vpconnect_install`` (без подкоманды ``gui``)."""
     p = argparse.ArgumentParser(
         prog="python -m vpconnect_install",
         description="Provision server over SSH via vpconnect-configure (WireGuard, MTProxy, VPManage).",
@@ -86,22 +105,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--enable-firewall",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="Enable firewall on server during 04_setsystemaccess (ufw; default: true for --auto-setup, false otherwise)",
+        help="Enable ufw firewall in 04_setsystemaccess (default: with --auto-setup, else off)",
     )
     p.add_argument("--new-ssh-public-key", default=None, help="Extra OpenSSH public line for root")
     p.add_argument("--new-ssh-public-key-file", default=None)
     p.add_argument("--domain", default=None, help="Manual FQDN for URLs (APP_DOMAIN)")
     p.add_argument(
-        "--domain-client-key",
-        default=None,
-        help="Key for domain service (env DOMAIN_CLIENT_KEY)",
-    )
-    p.add_argument("--domain-client-key-file", default=None)
-    p.add_argument(
         "--use-public-ip",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="When no domain/key: detect public IP on server (not needed with --auto-setup)",
+        help="When no domain: detect public IP on server (not needed with --auto-setup)",
     )
     p.add_argument(
         "--vpconfigure-repo-url",
@@ -135,10 +148,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="VPManage admin password (env VPM_PASSWORD); if omitted, generated on server (08)",
     )
     p.add_argument("--vpm-password-file", default=None)
-    p.add_argument("--git-url", default=d.GIT_URL)
-    p.add_argument("--git-branch", default=d.GIT_BRANCH)
-    p.add_argument("--install-path", default=d.INSTALL_PATH)
-    p.add_argument("--systemd-service", default=d.SYSTEMD_SERVICE_VPMANAGE)
     p.add_argument("--ssh-connect-timeout", type=int, default=d.SSH_CONNECT_TIMEOUT)
     p.add_argument("--command-timeout", type=int, default=d.COMMAND_TIMEOUT)
     p.add_argument("--reboot-wait-timeout", type=int, default=d.REBOOT_WAIT_TIMEOUT)
@@ -152,6 +161,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
+    """Собрать :class:`~vpconnect_install.config.ProvisionConfig` из ``parse_args``."""
     root_pw = _secret(ns.root_password, "ROOT_PASSWORD", ns.root_password_file)
     key_pp = _secret(
         ns.root_private_key_passphrase,
@@ -164,27 +174,9 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
     if ns.new_ssh_public_key_file:
         extra_pub = _read_file(ns.new_ssh_public_key_file)
 
-    set_wg = ns.set_wireguard
-    set_mt = ns.set_mtproxy
-    set_vpm = ns.set_vpmanage
-    if not ns.auto_setup:
-        if set_wg is None:
-            set_wg = False
-        if set_mt is None:
-            set_mt = False
-        if set_vpm is None:
-            set_vpm = False
-    else:
-        set_wg = True if set_wg is None else set_wg
-        set_mt = True if set_mt is None else set_mt
-        set_vpm = True if set_vpm is None else set_vpm
+    set_wg, set_mt, set_vpm = _feature_flags_from_ns(ns)
 
     domain = ns.domain.strip() if ns.domain else None
-    dom_key = _secret(
-        ns.domain_client_key,
-        "DOMAIN_CLIENT_KEY",
-        ns.domain_client_key_file,
-    )
 
     enable_fw: bool
     if ns.enable_firewall is None:
@@ -206,7 +198,6 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
         enable_firewall=enable_fw,
         set_domain=False,
         domain=domain,
-        domain_client_key=dom_key,
         use_public_ip=bool(ns.use_public_ip),
         set_wireguard=bool(set_wg),
         set_mtproxy=bool(set_mt),
@@ -218,10 +209,6 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
         vpm_http_port=ns.vpm_http_port,
         vpm_password=vpm_pw,
         vpconfigure_repo_url=(ns.vpconfigure_repo_url or "").strip() or d.VPCONFIGURE_REPO_URL_DEFAULT,
-        git_url=ns.git_url,
-        git_branch=ns.git_branch,
-        install_path=ns.install_path,
-        systemd_service=ns.systemd_service,
         ssh_connect_timeout=ns.ssh_connect_timeout,
         command_timeout=ns.command_timeout,
         reboot_wait_timeout=ns.reboot_wait_timeout,
@@ -230,6 +217,7 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Запустить один прогон установки; вернуть ``0`` при успехе, ``1`` при исключении."""
     args = build_arg_parser().parse_args(argv)
     cfg = config_from_args(args)
     base = Path(args.artifacts_dir).resolve() if args.artifacts_dir else None

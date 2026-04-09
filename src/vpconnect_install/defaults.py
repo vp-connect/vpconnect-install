@@ -1,15 +1,13 @@
-"""Project defaults (ports, git, systemd names, timeouts). Change here instead of scattered literals."""
+"""
+Константы по умолчанию для клиента vpconnect-install.
+
+Порты, таймауты, пути на сервере для WireGuard, URL/ветка репозитория **remote** скриптов 00–03.
+Менять здесь предпочтительнее, чем размазывать литералы по коду.
+"""
 
 from __future__ import annotations
 
-# Git / VPManage deploy
-GIT_URL = "https://github.com/vpconnect/selfvpn.git"
-GIT_BRANCH = "main"
-INSTALL_PATH = "/opt/selfvpn"
-SYSTEMD_SERVICE_VPMANAGE = "selfvpn"
-
-# SSH / runner
-# RSA для ключа оператора в provision-artifacts (размер модуля в битах).
+# SSH / runner — RSA ключа оператора в provision-artifacts (размер модуля, бит).
 OPERATOR_SSH_RSA_KEY_BITS = 2048
 SSH_CONNECT_TIMEOUT = 30
 COMMAND_TIMEOUT = 3600
@@ -25,15 +23,6 @@ VPM_HTTP_PORT_DEFAULT = 80
 WG_CLIENT_CERT_PATH_DEFAULT = "/usr/wireguard/client_cert"
 WG_CLIENT_CONFIG_PATH_DEFAULT = "/usr/wireguard/client_config"
 
-# systemd unit name for MTProxy (finalize.sh / status)
-MTPROXY_SYSTEMD_SERVICE = "mtproxy"
-
-REMOTE_WORKDIR = "/root/.vpconnect-install"
-
-# When auto_setup=True, enable these feature groups by default
-AUTO_SETUP_SET_WIREGUARD = True
-AUTO_SETUP_SET_MTPROXY = True
-AUTO_SETUP_SET_VPMANAGE = True
 # Generated secrets length (approx)
 SECRET_TOKEN_BYTES = 16
 
@@ -43,7 +32,3 @@ VPCONFIGURE_REPO_URL_DEFAULT = "https://github.com/vp-connect/vpconnect-configur
 VPCONFIGURE_RAW_GIT_BRANCH = "main"
 # Path inside that repo before script name (no leading/trailing slash)
 REMOTE_SCRIPTS_REPO_PATH = "remote"
-
-# HTTP service: returns FQDN for domain_client_key (plain text first line, or JSON {"domain":"..."})
-DOMAIN_CLIENT_SERVICE_URL = "https://example.com/api/vpconnect-domain"
-DOMAIN_CLIENT_SERVICE_TIMEOUT = 30

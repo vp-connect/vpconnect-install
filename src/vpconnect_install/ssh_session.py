@@ -1,5 +1,8 @@
 """
-Обёртка над Paramiko: подключение по ключу или паролю, exec, SFTP, потоковый вывод в лог.
+Тонкая обёртка над Paramiko для установщика.
+
+Подключение (сначала ключ с диска, иначе пароль), неинтерактивное ``exec_command``, SFTP upload/download,
+опционально потоковый вывод интерактивной команды в лог.
 """
 
 from __future__ import annotations
@@ -42,7 +45,12 @@ def _new_ssh_client() -> SSHClient:
 
 
 class SSHSession:
-    """Paramiko: try private key first, then password; SFTP; streaming exec."""
+    """
+    Сессия SSH к одному хосту.
+
+    После :meth:`connect` доступны :meth:`exec_command`, :meth:`upload_bytes`, :meth:`download_bytes`.
+    Свойство :attr:`auth_method` заполняется после успешного входа (``private_key`` или ``password``).
+    """
 
     def __init__(
         self,
@@ -114,6 +122,7 @@ class SSHSession:
             return False
 
     def connect(self) -> None:
+        """Установить соединение; при неудаче — :exc:`RuntimeError` с кратким сообщением."""
         self.close()
         self._log(f"[Подключение] Подключаюсь к {self.host}:{self.port}")
 
@@ -155,6 +164,7 @@ class SSHSession:
         return self._client
 
     def upload_bytes(self, remote_path: str, data: bytes) -> None:
+        """Записать байты на сервер по пути ``remote_path`` (создаёт промежуточные каталоги через SFTP)."""
         sftp: SFTPClient = self.client.open_sftp()
         try:
             dirname = remote_path.rsplit("/", 1)[0]
@@ -167,6 +177,7 @@ class SSHSession:
         self._log(f"Uploaded {len(data)} bytes to {remote_path}")
 
     def download_bytes(self, remote_path: str) -> bytes:
+        """Прочитать удалённый файл целиком."""
         sftp: SFTPClient = self.client.open_sftp()
         try:
             with sftp.open(remote_path, "rb") as f:
@@ -196,6 +207,7 @@ class SSHSession:
         timeout: int | None = None,
         get_pty: bool = True,
     ) -> int:
+        """Выполнить команду с PTY, строчно писать stdout/stderr в лог; вернуть код выхода."""
         transport = self.client.get_transport()
         if transport is None:
             raise RuntimeError("SSH transport not available")
@@ -244,6 +256,7 @@ class SSHSession:
         *,
         timeout: int | None = None,
     ) -> tuple[int, str, str]:
+        """Выполнить команду на сервере; вернуть ``(код_выхода, stdout, stderr)`` в UTF-8 с заменой ошибок."""
         stdin, stdout, stderr = self.client.exec_command(command, timeout=timeout)
         try:
             out_b = stdout.read()
@@ -254,6 +267,7 @@ class SSHSession:
             stdin.close()
 
     def test_connect(self) -> bool:
+        """Проверить TCP-доступность ``host:port`` без SSH-аутентификации."""
         try:
             sock = socket.create_connection((self.host, self.port), timeout=self.connect_timeout)
             sock.close()

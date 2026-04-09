@@ -1,5 +1,5 @@
 """
-Локальные артефакты прогона: каталог ``provision-artifacts``, RSA-ключ оператора, ACCESS.txt.
+Локальные артефакты прогона: каталог ``provision-artifacts``, при auto_setup — RSA-ключ оператора, ACCESS.txt.
 
 Проверка прав на запись до SSH и открытие каталога в файловом менеджере после GUI.
 """
@@ -24,17 +24,23 @@ from vpconnect_install.config import ProvisionConfig
 
 @dataclass
 class ArtifactBundle:
-    """Paths and material for one provisioning run."""
+    """
+    Каталог одного прогона и опциональная пара RSA «оператора».
+
+    Ключи создаются только в режиме ``auto_setup`` и передаются в ``04_setsystemaccess.sh``.
+    """
 
     root: Path
-    private_key_path: Path
-    public_key_path: Path
-    public_key_openssh: str
+    private_key_path: Path | None = None
+    public_key_path: Path | None = None
+    public_key_openssh: str = ""
 
 
 @dataclass
 class AccessFileState:
-    """Накопление полей для ACCESS.txt между шагами (WireGuard / MTProxy заполняются по мере готовности)."""
+    """
+    Данные для повторной записи ``ACCESS.txt`` между шагами 06–07 (ключи и секреты по мере появления).
+    """
 
     mtproxy_secret: str | None = None
     wireguard_public_key: str | None = None
@@ -42,6 +48,7 @@ class AccessFileState:
 
 
 def default_artifacts_base(cwd: Path | None = None) -> Path:
+    """Базовый каталог ``provision-artifacts`` относительно ``cwd`` (по умолчанию текущая директория)."""
     base = cwd or Path.cwd()
     return base / "provision-artifacts"
 
@@ -84,13 +91,8 @@ def open_directory_in_file_manager(path: Path) -> None:
         pass
 
 
-def prepare_artifact_dir(config: ProvisionConfig, base: Path | None = None) -> ArtifactBundle:
-    """Создать provision-artifacts/<host>-<timestamp>/ и пару OpenSSH RSA (размер — ``OPERATOR_SSH_RSA_KEY_BITS``)."""
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    safe_host = config.host.replace(":", "_").replace("/", "_")
-    root = (base or default_artifacts_base()) / f"{safe_host}-{ts}"
-    root.mkdir(parents=True, exist_ok=True)
-
+def _write_operator_rsa_keypair(root: Path) -> ArtifactBundle:
+    """Сгенерировать ``id_rsa`` / ``id_rsa.pub`` в ``root``; вернуть заполненный :class:`ArtifactBundle`."""
     priv = rsa.generate_private_key(public_exponent=65537, key_size=d.OPERATOR_SSH_RSA_KEY_BITS)
     priv_pem = priv.private_bytes(
         encoding=serialization.Encoding.PEM,
@@ -103,7 +105,6 @@ def prepare_artifact_dir(config: ProvisionConfig, base: Path | None = None) -> A
         format=serialization.PublicFormat.OpenSSH,
     )
     pub_str = pub_bytes.decode("ascii")
-
     pk = root / "id_rsa"
     pubp = root / "id_rsa.pub"
     pk.write_bytes(priv_pem)
@@ -112,16 +113,39 @@ def prepare_artifact_dir(config: ProvisionConfig, base: Path | None = None) -> A
         pk.chmod(0o600)
     except NotImplementedError:
         pass
+    return ArtifactBundle(root=root, private_key_path=pk, public_key_path=pubp, public_key_openssh=pub_str)
 
-    return ArtifactBundle(
-        root=root,
-        private_key_path=pk,
-        public_key_path=pubp,
-        public_key_openssh=pub_str,
-    )
+
+def _access_ssh_command(
+    bundle: ArtifactBundle,
+    config: ProvisionConfig,
+    target: str,
+    ssh_port: int,
+) -> str:
+    """Строка ``ssh …`` для ``ACCESS.txt`` (сгенерированный ключ, путь root-ключа или без ``-i``)."""
+    key_for_ssh: Path | None = bundle.private_key_path
+    if key_for_ssh is None:
+        rk = config.root_private_key.strip()
+        if rk and Path(rk).is_file():
+            key_for_ssh = Path(rk)
+    if key_for_ssh is not None:
+        return f"ssh -i {shlex.quote(str(key_for_ssh))} -p {ssh_port} root@{shlex.quote(target)}"
+    return f"ssh -p {ssh_port} root@{shlex.quote(target)}"
+
+
+def prepare_artifact_dir(config: ProvisionConfig, base: Path | None = None) -> ArtifactBundle:
+    """Создать ``provision-artifacts/<host>-<timestamp>/``; RSA оператора — только при ``config.auto_setup``."""
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    safe_host = config.host.replace(":", "_").replace("/", "_")
+    root = (base or default_artifacts_base()) / f"{safe_host}-{ts}"
+    root.mkdir(parents=True, exist_ok=True)
+    if not config.auto_setup:
+        return ArtifactBundle(root=root)
+    return _write_operator_rsa_keypair(root)
 
 
 def write_secret_file(bundle: ArtifactBundle, filename: str, content: str) -> Path:
+    """Записать текстовый секрет в каталог артефактов с правами ``0600`` (где поддерживается ОС)."""
     p = bundle.root / filename
     p.write_text(content.strip() + "\n", encoding="utf-8")
     try:
@@ -136,18 +160,18 @@ def write_access_file(
     config: ProvisionConfig,
     state: AccessFileState,
 ) -> Path:
-    """Записать ACCESS.txt из конфигурации и накопленного ``state`` (можно вызывать многократно)."""
+    """Записать ``ACCESS.txt`` из конфигурации и накопленного ``state`` (идемпотентно по содержимому файла)."""
     target = config.effective_domain_or_ip or config.host
     ssh_port = config.new_ssh_port if config.new_ssh_port is not None else config.port
-    ssh_cmd = f"ssh -i {shlex.quote(str(bundle.private_key_path))} -p {ssh_port} root@{shlex.quote(target)}"
+    ssh_cmd = _access_ssh_command(bundle, config, target, ssh_port)
     lines = [
         f"Host: {config.host}",
         f"SSH effective target: {target}",
         f"SSH port: {ssh_port}",
-        f"Operator private key (generated): {bundle.private_key_path}",
-        f"SSH command: {ssh_cmd}",
-        "",
     ]
+    if bundle.private_key_path is not None:
+        lines.append(f"Operator private key (generated): {bundle.private_key_path}")
+    lines.extend([f"SSH command: {ssh_cmd}", ""])
     if config.set_wireguard:
         lines.append(f"WireGuard UDP port: {config.wg_port}")
     if config.set_mtproxy:
@@ -173,8 +197,6 @@ def write_access_file(
     )
     if config.domain:
         lines.append(f"Domain (FQDN): {config.domain}")
-    if config.domain_client_key.strip():
-        lines.append("Domain client key: (set)")
     if state.last_saved_after:
         lines.extend(["", f"Last artifact save: {state.last_saved_after}"])
     path = bundle.root / "ACCESS.txt"

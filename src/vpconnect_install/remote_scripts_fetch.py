@@ -1,10 +1,13 @@
-"""GitHub raw URL helpers for vpconnect-configure (и др.)."""
+"""
+Построение URL для сырого содержимого файлов на GitHub (``raw.githubusercontent.com``).
+
+Используется при загрузке скриптов **00–03** и в тестах; путь к скрипту внутри репозитория задаётся
+через :data:`vpconnect_install.defaults.REMOTE_SCRIPTS_REPO_PATH`.
+"""
 
 from __future__ import annotations
 
 import re
-
-import requests
 
 from vpconnect_install import defaults as d
 
@@ -31,18 +34,7 @@ def github_raw_file_url(repo_url: str, branch: str, relative_path: str) -> str:
 
 
 def script_raw_url(repo_url: str, branch: str, script_name: str) -> str:
+    """URL файла ``script_name`` под префиксом ``REMOTE_SCRIPTS_REPO_PATH`` (например ``remote/00_…sh``)."""
     prefix = d.REMOTE_SCRIPTS_REPO_PATH.strip("/")
     path = f"{prefix}/{script_name}" if prefix else script_name
     return github_raw_file_url(repo_url, branch, path)
-
-
-def probe_scripts_available(repo_url: str, branch: str, script_name: str, timeout: int = 15) -> bool:
-    """Return True if raw URL responds with HTTP 200."""
-    if not repo_url.strip():
-        return False
-    try:
-        url = script_raw_url(repo_url, branch, script_name)
-        r = requests.head(url, allow_redirects=True, timeout=timeout)
-        return r.status_code == 200
-    except requests.RequestException:
-        return False

@@ -1,10 +1,14 @@
-"""Запуск скриптов vpconnect-configure 04–08 на сервере после 00–03."""
+"""
+Запуск скриптов vpconnect-configure **04–08** на сервере (после успешных 00–03).
+
+Формирует аргументы CLI для ``04_setsystemaccess``, ``05_setdomain``, ``06–08``,
+разбирает ``result:`` там, где нужны пути/пароли для локальных артефактов (MTProxy secret, пароль VPManage).
+"""
 
 from __future__ import annotations
 
 import shlex
 from collections.abc import Callable
-from pathlib import PurePosixPath
 
 from vpconnect_install import defaults as d
 from vpconnect_install.config import ProvisionConfig
@@ -14,42 +18,25 @@ from vpconnect_install.configure_bootstrap import (
     abort_configure_on_failure,
     exec_vpconfigure_script,
     parse_configure_result_line,
+    parse_result_line_field,
 )
 from vpconnect_install.outputs import AccessFileState, ArtifactBundle
 from vpconnect_install.ssh_session import SSHSession
 
 LogFn = Callable[[str], None]
 
-# Удалённые пути для SFTP всегда в POSIX-виде (на Windows клиенте pathlib.Path даёт обратные слэши).
-_DEFAULT_REMOTE_MTPROXY_SECRET_PATH = str(PurePosixPath("/etc/wireguard/mtproxy_secret.txt"))
+# Fallback, если в stdout 07 нет mtproxy_secret_path (ожидаемый путь на сервере — POSIX).
+_DEFAULT_REMOTE_MTPROXY_SECRET_PATH = "/etc/wireguard/mtproxy_secret.txt"
 
 
 def _mtproxy_secret_path_from_07_stdout(stdout: str) -> str | None:
-    """Поле mtproxy_secret_path:… в строке result: из stdout 07_setmtproxy.sh."""
-    _st, _msg, _br, line1 = parse_configure_result_line(stdout)
-    if not line1:
-        return None
-    for seg in line1.split(";"):
-        seg = seg.strip()
-        key, sep, val = seg.partition(":")
-        if sep and key.strip().lower() == "mtproxy_secret_path":
-            v = val.strip()
-            return v or None
-    return None
+    """Путь к секрету MTProxy из stdout ``07_setmtproxy.sh`` (сегмент ``mtproxy_secret_path:``)."""
+    return parse_result_line_field(stdout, "mtproxy_secret_path")
 
 
 def _vpm_password_from_08_stdout(stdout: str) -> str | None:
-    """Поле password:… в строке result: из stdout 08_setvpmanage.sh (админка VPManage)."""
-    _st, _msg, _br, line1 = parse_configure_result_line(stdout)
-    if not line1:
-        return None
-    for seg in line1.split(";"):
-        seg = seg.strip()
-        key, sep, val = seg.partition(":")
-        if sep and key.strip().lower() == "password":
-            v = val.strip()
-            return v or None
-    return None
+    """Пароль админки VPManage из stdout ``08_setvpmanage.sh`` (сегмент ``password:``)."""
+    return parse_result_line_field(stdout, "password")
 
 
 def _run_configure_script(
@@ -64,6 +51,7 @@ def _run_configure_script(
     blank_before: bool,
     extra_env_lines: tuple[str, ...] = (),
 ) -> str:
+    """Вызов скрипта через ``exec_vpconfigure_script``, разбор ``result:``, стоп при ошибке."""
     if blank_before:
         log("")
     code, out, err = exec_vpconfigure_script(
@@ -92,6 +80,7 @@ def _chmod_remote(
     path: str,
     timeout: int,
 ) -> None:
+    """Установить ``600`` на временный файл на сервере (пароль/публичный ключ для 04)."""
     c, o, e = session.exec_command(f"chmod 600 {shlex.quote(path)}", timeout=timeout)
     if c != 0:
         log(f"Ошибка! chmod {path}: {e.strip() or o}")
@@ -119,8 +108,6 @@ def _need_run_05(config: ProvisionConfig) -> bool:
     if config.auto_setup:
         return True
     if config.set_domain:
-        return True
-    if config.domain_client_key.strip():
         return True
     if config.domain and config.domain.strip():
         return True
@@ -231,11 +218,7 @@ def run_vpconfigure_phases_05_to_08(
         dom = (config.domain or "").strip()
         if dom:
             parts.append(f"--domain {shlex.quote(dom)}")
-        dkey = config.domain_client_key.strip()
-        if dkey and not dom:
-            parts.append(f"--domain-client-key {shlex.quote(dkey)}")
         extra = " " + " ".join(parts)
-        env = (f"export VPCONFIGURE_DOMAIN_SERVICE_URL={shlex.quote(d.DOMAIN_CLIENT_SERVICE_URL)}",)
         _run_configure_script(
             log,
             session,
@@ -245,7 +228,6 @@ def run_vpconfigure_phases_05_to_08(
             extra,
             tmo,
             blank_before=True,
-            extra_env_lines=env,
         )
         artifact_persist("после 05_setdomain.sh")
         ran_any_step = True

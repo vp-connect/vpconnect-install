@@ -15,12 +15,18 @@ from vpconnect_install.remote_scripts_fetch import parse_github_repo_url
 
 
 def _port_ok(p: int) -> bool:
+    """Допустимый TCP/UDP порт."""
     return 1 <= p <= 65535
 
 
 @dataclass
 class ProvisionConfig:
-    """All parameters for one provisioning run (CLI and GUI)."""
+    """
+    Параметры одного прогона установки (CLI и GUI).
+
+    Поля с префиксом ``set_*`` и ``new_*`` в основном относятся к расширенному режиму;
+    при ``auto_setup=True`` часть значений заполняется в :meth:`apply_auto_setup`.
+    """
 
     host: str
     port: int = 22
@@ -40,8 +46,7 @@ class ProvisionConfig:
     # GUI: master toggle for domain section
     set_domain: bool = False
     domain: str | None = None
-    domain_client_key: str = ""
-    # CLI: detect public IP on server (like former --request-domain) when no domain/key
+    # CLI: detect public IP on server (like former --request-domain) when no domain
     use_public_ip: bool = False
 
     set_wireguard: bool = False
@@ -56,11 +61,6 @@ class ProvisionConfig:
     vpm_http_port: int = d.VPM_HTTP_PORT_DEFAULT
     vpm_password: str = ""
 
-    git_url: str = d.GIT_URL
-    git_branch: str = d.GIT_BRANCH
-    install_path: str = d.INSTALL_PATH
-    systemd_service: str = d.SYSTEMD_SERVICE_VPMANAGE
-
     # Скрипты 00–03 с GitHub → домашний каталог на сервере, затем по очереди
     vpconfigure_repo_url: str = d.VPCONFIGURE_REPO_URL_DEFAULT
 
@@ -72,13 +72,14 @@ class ProvisionConfig:
     effective_domain_or_ip: str | None = field(default=None, repr=False)
 
     def apply_auto_setup(self) -> None:
-        """Fill domain mode and generated secrets when auto_setup is True (flags come from CLI/GUI)."""
+        """
+        При ``auto_setup``: сброс ручного домена, генерация нового пароля root (если пусто),
+        порт SSH 2222 по умолчанию, очистка лишнего публичного ключа в поле.
+        """
         if not self.auto_setup:
             return
         self.domain = None
         # В auto_setup домен обычно определяется по внешнему IP.
-        # Но если пользователь задал ключ сервиса домена — не затираем его (05_setdomain сможет получить FQDN).
-        self.domain_client_key = self.domain_client_key.strip()
         # Упрощённый режим: всегда новый пароль, порт 2222, только ключ оператора из артефактов (не поле extra).
         if not self.new_root_password.strip():
             self.new_root_password = secrets.token_urlsafe(d.SECRET_TOKEN_BYTES)
@@ -89,6 +90,7 @@ class ProvisionConfig:
         # возвращается в result:… password:… и подставляется в config после шага 08.
 
     def validate(self) -> None:
+        """Проверить обязательные поля; при ошибке — :exc:`ValueError` с пояснением."""
         _validate_required_ports(self)
         _validate_ssh_credentials(self)
         _validate_vpconfigure_repo(self)
@@ -96,6 +98,7 @@ class ProvisionConfig:
 
 
 def _validate_required_ports(cfg: ProvisionConfig) -> None:
+    """Проверка host и всех портов из конфига."""
     if not cfg.host.strip():
         raise ValueError("host is required")
     if not _port_ok(cfg.port):
@@ -112,6 +115,7 @@ def _validate_required_ports(cfg: ProvisionConfig) -> None:
 
 
 def _validate_ssh_credentials(cfg: ProvisionConfig) -> None:
+    """Нужен пароль root и/или существующий файл приватного ключа."""
     key_path = cfg.root_private_key.strip()
     has_key = bool(key_path and Path(key_path).is_file())
     has_pw = bool(cfg.root_password)
@@ -130,6 +134,7 @@ def _validate_vpconfigure_repo(cfg: ProvisionConfig) -> None:
 
 
 def _validate_domain_manual(cfg: ProvisionConfig) -> None:
+    """В расширенном режиме непустое поле домена не может быть пустой строкой."""
     if cfg.auto_setup:
         return
     if cfg.domain is not None and not cfg.domain.strip():

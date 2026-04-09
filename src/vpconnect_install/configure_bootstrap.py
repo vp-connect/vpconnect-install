@@ -1,4 +1,12 @@
-"""Скачивание скриптов 00–03 с GitHub (raw), загрузка в $HOME и поочерёдный запуск; 04–08 — из каталога после 03."""
+"""
+Загрузка и выполнение скриптов **00–03** vpconnect-configure на сервере.
+
+Скрипты скачиваются с ``raw.githubusercontent.com`` в ``$HOME``, затем запускаются по порядку.
+Каталог с **04–08** появляется после успешного **03** (клон репозитория на сервере).
+
+Публичные функции разбора stdout: :func:`parse_configure_result_line`, :func:`parse_result_line_field`,
+:func:`parse_configure_install_path`. Запуск одного скрипта из каталога: :func:`exec_vpconfigure_script`.
+"""
 
 from __future__ import annotations
 
@@ -57,17 +65,27 @@ def parse_configure_result_line(stdout: str) -> tuple[str, str, str | None, str]
     return status, message, branch, line1
 
 
-def parse_configure_install_path(stdout: str) -> str | None:
-    """Поле path:… в строке result: (stdout 03_getconfigure.sh после успешного клона)."""
+def parse_result_line_field(stdout: str, field_name: str) -> str | None:
+    """
+    Значение сегмента ``имя:значение`` в последней строке ``result:…`` stdout скрипта.
+
+    Сравнение имени поля без учёта регистра. Пустое значение после ``:`` трактуется как отсутствие.
+    """
     _st, _msg, _br, line1 = parse_configure_result_line(stdout)
     if not line1:
         return None
+    prefix = f"{field_name.strip().lower()}:"
     for seg in line1.split(";"):
         seg = seg.strip()
-        if seg.lower().startswith("path:"):
+        if seg.lower().startswith(prefix):
             val = seg.split(":", 1)[1].strip()
             return val or None
     return None
+
+
+def parse_configure_install_path(stdout: str) -> str | None:
+    """Поле ``path:…`` в строке ``result:`` (stdout ``03_getconfigure.sh`` после успешного клона)."""
+    return parse_result_line_field(stdout, "path")
 
 
 def resolve_configure_install_dir(
@@ -154,13 +172,8 @@ def _stdout_lines_before_marked_line(full: str, marker_line: str) -> str:
 
 
 def _configure_step_failed(status: str, exit_code: int) -> bool:
-    if status == "error":
-        return True
-    if status == "unknown":
-        return True
-    if exit_code != 0:
-        return True
-    return False
+    """True, если шаг следует считать провалом (статус из ``result:`` или ненулевой код выхода)."""
+    return status in ("error", "unknown") or exit_code != 0
 
 
 def abort_configure_on_failure(
@@ -198,7 +211,12 @@ def exec_vpconfigure_script(
     *,
     extra_env_lines: tuple[str, ...] = (),
 ) -> tuple[int, str, str]:
-    """work_dir — каталог, где лежит script_name (cd туда перед запуском)."""
+    """
+    Выполнить ``bash script_name`` из ``work_dir`` в login-shell.
+
+    При непустом ``export_branch`` перед запуском выставляется ``VPCONFIGURE_GIT_BRANCH``.
+    ``extra_cli`` дописывается к имени скрипта (пробел и аргументы CLI скрипта).
+    """
     script_path = f"{work_dir}/{script_name}"
     inner_parts = [f"cd {shlex.quote(work_dir)}", "set -e"]
     for el in extra_env_lines:
@@ -210,6 +228,15 @@ def exec_vpconfigure_script(
     inner_parts.append(f"bash {shlex.quote(script_path)}{extra_cli}")
     inner = " && ".join(inner_parts)
     return session.exec_command(f"bash -lc {shlex.quote(inner)}", timeout=timeout)
+
+
+def _chmod_plus_x_remote(session: SSHSession, log: LogFn, remote_path: str, script_name: str) -> None:
+    """``chmod +x`` для загруженного скрипта; при ошибке — лог и :exc:`RuntimeError`."""
+    c_ch, o_ch, e_ch = session.exec_command(f"chmod +x {shlex.quote(remote_path)}", timeout=30)
+    if c_ch != 0:
+        log(f"Ошибка! chmod {script_name}: {e_ch.strip() or o_ch}")
+        log(INSTALL_ABORTED_MSG)
+        raise RuntimeError(INSTALL_ABORTED_MSG)
 
 
 def run_vpconnect_configure_bootstrap(
@@ -243,11 +270,7 @@ def run_vpconnect_configure_bootstrap(
         remote_path = f"{home}/{name}"
         session.upload_bytes(remote_path, body)
         try:
-            c_ch, o_ch, e_ch = session.exec_command(f"chmod +x {shlex.quote(remote_path)}", timeout=30)
-            if c_ch != 0:
-                log(f"Ошибка! chmod {name}: {e_ch.strip() or o_ch}")
-                log(INSTALL_ABORTED_MSG)
-                raise RuntimeError(INSTALL_ABORTED_MSG)
+            _chmod_plus_x_remote(session, log, remote_path, name)
         except RuntimeError:
             raise
         except Exception as ex:

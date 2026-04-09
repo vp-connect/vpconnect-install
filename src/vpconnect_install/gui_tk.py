@@ -1,9 +1,8 @@
 """
-Графический интерфейс (Tkinter) для удалённой настройки сервера через vpconnect-install.
+Графический интерфейс (Tkinter) для :func:`vpconnect_install.runner.run`.
 
-Целевая ОС на сервере — одно из семейств vpconnect-configure (debian / centos / freebsd);
-см. README проекта. Собирает поля в :class:`ProvisionConfig`, запускает
-:func:`vpconnect_install.runner.run` в фоновом потоке; по успеху открывает каталог артефактов.
+Два режима: упрощённый (``auto_setup``) и расширенный с отдельными блоками (SSH, домен, WG, MTProxy, VPManage).
+Лог выводится в фоне; по успеху открывается каталог артефактов в файловом менеджере ОС.
 """
 
 from __future__ import annotations
@@ -85,7 +84,6 @@ def _build_config(
     enable_firewall: bool,
     set_domain: bool,
     domain: str,
-    domain_client_key: str,
     vpconfigure_repo_url: str,
     set_wg: bool,
     wg_port: int,
@@ -97,12 +95,10 @@ def _build_config(
     vpm_http: int,
     vpm_pw: str,
 ) -> ProvisionConfig:
-    """Собрать :class:`ProvisionConfig` из значений полей формы (режимы упрощённый/расширенный)."""
+    """Собрать конфигурацию из значений виджетов (учёт ``auto_setup`` и чекбоксов расширенного режима)."""
     dom = domain.strip() or None
-    dkey = domain_client_key.strip()
     if not set_domain:
         dom = None
-        dkey = ""
 
     cfg = ProvisionConfig(
         host=host.strip(),
@@ -118,7 +114,6 @@ def _build_config(
         enable_firewall=bool(enable_firewall) if set_new_connect else False,
         set_domain=set_domain,
         domain=dom,
-        domain_client_key=dkey,
         vpconfigure_repo_url=vpconfigure_repo_url.strip() or d.VPCONFIGURE_REPO_URL_DEFAULT,
         set_wireguard=set_wg if not auto_setup else True,
         wg_port=wg_port,
@@ -130,16 +125,15 @@ def _build_config(
         vpm_http_port=vpm_http,
         vpm_password=vpm_pw if set_vpm or auto_setup else "",
     )
-    if auto_setup:
-        cfg.set_wireguard = True
-        cfg.set_mtproxy = True
-        cfg.set_vpmanage = True
-        cfg.set_new_connect = True
     return cfg
 
 
 class ProvisionerGUI:
-    """Окно Tk: ввод параметров, фоновый :func:`~vpconnect_install.runner.run`, лог, открытие каталога артефактов."""
+    """
+    Главное окно: форма слева, лог справа, кнопки Start/Exit.
+
+    Запуск установки не блокирует UI (поток + очередь сообщений в лог).
+    """
 
     def __init__(self) -> None:
         self.root = tk.Tk()
@@ -149,8 +143,6 @@ class ProvisionerGUI:
         self._running = False
 
         self.auto_setup_var = tk.BooleanVar(value=True)
-        # Общая переменная для "Ключ сервиса домена" (дублированный ввод в упрощённом и расширенном режимах).
-        self.domain_key_var = tk.StringVar(value="")
 
         frm = ttk.Frame(self.root, padding=8)
         self.frm = frm
@@ -228,10 +220,6 @@ class ProvisionerGUI:
         self.vpconfigure_repo_ent = ttk.Entry(conn, width=42)
         self.vpconfigure_repo_ent.insert(0, d.VPCONFIGURE_REPO_URL_DEFAULT)
         self.vpconfigure_repo_ent.grid(row=cr, column=1, sticky="ew", padx=4)
-        cr += 1
-        ttk.Label(conn, text="Ключ сервиса домена").grid(row=cr, column=0, sticky="e")
-        self.domain_key_top_ent = ttk.Entry(conn, width=42, textvariable=self.domain_key_var)
-        self.domain_key_top_ent.grid(row=cr, column=1, sticky="ew", padx=4)
 
         self.advanced_frame = ttk.Frame(left_panel)
         self.advanced_frame.grid(row=r, column=0, columnspan=2, sticky="ew", pady=4)
@@ -273,10 +261,7 @@ class ProvisionerGUI:
         ttk.Label(domf, text="Домен (FQDN)").grid(row=1, column=0, sticky="e")
         self.domain_ent = ttk.Entry(domf, width=40)
         self.domain_ent.grid(row=1, column=1, sticky="ew", padx=4)
-        ttk.Label(domf, text="Ключ сервиса домена").grid(row=2, column=0, sticky="e")
-        self.domain_key_ent = ttk.Entry(domf, width=40, textvariable=self.domain_key_var)
-        self.domain_key_ent.grid(row=2, column=1, sticky="ew", padx=4)
-        self._dom_widgets = [self.domain_ent, self.domain_key_ent]
+        self._dom_widgets = [self.domain_ent]
         ar += 1
 
         self.set_wg_var = tk.BooleanVar(value=True)
@@ -494,7 +479,6 @@ class ProvisionerGUI:
                 enable_firewall=self.enable_fw_var.get() if not auto else True,
                 set_domain=self.set_dom_var.get() if not auto else False,
                 domain=self.domain_ent.get(),
-                domain_client_key=self.domain_key_var.get(),
                 vpconfigure_repo_url=self.vpconfigure_repo_ent.get(),
                 set_wg=self.set_wg_var.get(),
                 wg_port=_parse_int(self.wg_port, d.WG_PORT_DEFAULT),
@@ -556,5 +540,5 @@ def main() -> None:
     ProvisionerGUI().run_ui()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

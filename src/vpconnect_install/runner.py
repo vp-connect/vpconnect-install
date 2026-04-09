@@ -1,5 +1,8 @@
 """
-Оркестрация одного прогона: SSH, bootstrap vpconnect-configure 00–03, шаги 04–08, артефакты.
+Оркестрация полного прогона установки.
+
+Последовательность: локальные артефакты → SSH → bootstrap **00–03** → определение хоста для URL в
+``ACCESS.txt`` → **04** (при необходимости) → **05–08** → запрос перезагрузки и ожидание SSH.
 
 См. :mod:`vpconnect_install.configure_bootstrap` и :mod:`vpconnect_install.vpconfigure_provision`.
 """
@@ -14,7 +17,6 @@ from pathlib import Path
 from vpconnect_install import defaults as d
 from vpconnect_install.config import ProvisionConfig
 from vpconnect_install.configure_bootstrap import run_vpconnect_configure_bootstrap
-from vpconnect_install.domain_client import resolve_domain_fqdn
 from vpconnect_install.outputs import (
     AccessFileState,
     ArtifactBundle,
@@ -34,24 +36,41 @@ from vpconnect_install.vpconfigure_provision import (
 
 LogFn = Callable[[str], None]
 
+# Совпадает по смыслу с цепочкой curl в ``05_setdomain.sh`` (нужен до шага 05 для раннего ACCESS.txt).
+_PUBLIC_IPV4_PROBE_BASH = (
+    r"ip=$(curl -fsS -4 --max-time 10 https://ipv4.icanhazip.com 2>/dev/null | tr -d '\r\n' | head -c 256); "
+    r"[[ -n \"$ip\" && \"$ip\" != *' '* && \"$ip\" != *:* ]] && printf '%s' \"$ip\" && exit 0; "
+    r"ip=$(curl -fsS -4 --max-time 10 https://api.ipify.org 2>/dev/null | tr -d '\r\n' | head -c 256); "
+    r"[[ -n \"$ip\" && \"$ip\" != *' '* && \"$ip\" != *:* ]] && printf '%s' \"$ip\" && exit 0; "
+    r"ip=$(curl -fsS -4 --max-time 10 https://ifconfig.me/ip 2>/dev/null | tr -d '\r\n' | head -c 256); "
+    r"[[ -n \"$ip\" && \"$ip\" != *' '* && \"$ip\" != *:* ]] && printf '%s' \"$ip\" && exit 0; "
+    r"exit 1"
+)
+
 
 def _log_default(_: str) -> None:
     """Пустой логгер по умолчанию, если вызывающий не передал callback."""
-
     pass
 
 
+def _close_session_quietly(session: SSHSession) -> None:
+    try:
+        session.close()
+    except Exception:
+        pass
+
+
+def _post_connect_params(config: ProvisionConfig) -> tuple[int, str, str]:
+    """Порт SSH, пароль root и путь к ключу после применения настроек из конфига (для опроса/reboot)."""
+    port = config.new_ssh_port if config.new_ssh_port is not None else config.port
+    pw = config.new_root_password.strip() or config.root_password
+    key = config.root_private_key.strip()
+    return port, pw, key
+
+
 def _resolve_public_target(session: SSHSession, config: ProvisionConfig, log: LogFn) -> str:
-    """Определить публичный IPv4: curl -4 и ipv4-сервисы (как 05_setdomain.sh); иначе config.host."""
-    cmd = "bash -lc " + shlex.quote(
-        r"ip=$(curl -fsS -4 --max-time 10 https://ipv4.icanhazip.com 2>/dev/null | tr -d '\r\n' | head -c 256); "
-        r"[[ -n \"$ip\" && \"$ip\" != *' '* && \"$ip\" != *:* ]] && printf '%s' \"$ip\" && exit 0; "
-        r"ip=$(curl -fsS -4 --max-time 10 https://api.ipify.org 2>/dev/null | tr -d '\r\n' | head -c 256); "
-        r"[[ -n \"$ip\" && \"$ip\" != *' '* && \"$ip\" != *:* ]] && printf '%s' \"$ip\" && exit 0; "
-        r"ip=$(curl -fsS -4 --max-time 10 https://ifconfig.me/ip 2>/dev/null | tr -d '\r\n' | head -c 256); "
-        r"[[ -n \"$ip\" && \"$ip\" != *' '* && \"$ip\" != *:* ]] && printf '%s' \"$ip\" && exit 0; "
-        r"exit 1"
-    )
+    """Определить публичный IPv4 на сервере по HTTP; при неудаче — ``config.host``."""
+    cmd = "bash -lc " + shlex.quote(_PUBLIC_IPV4_PROBE_BASH)
     _code, out, _err = session.exec_command(cmd, timeout=30)
     ip = (out or "").strip()
     if not ip or " " in ip or ":" in ip:
@@ -62,31 +81,20 @@ def _resolve_public_target(session: SSHSession, config: ProvisionConfig, log: Lo
 
 
 def _want_public_ip(config: ProvisionConfig) -> bool:
-    """Нужен ли опрос публичного IP (нет FQDN и ключа домена).
+    """Нужен ли опрос публичного IP (нет явного FQDN).
 
     Да при auto_setup, --use-public-ip или включённой секции домена в GUI.
     """
     if config.domain and config.domain.strip():
         return False
-    if config.domain_client_key and config.domain_client_key.strip():
-        return False
     return bool(config.auto_setup or config.use_public_ip or config.set_domain)
 
 
 def _apply_effective_host(session: SSHSession, config: ProvisionConfig, log: LogFn) -> None:
-    """Заполнить ``config.effective_domain_or_ip`` по приоритету: FQDN, сервис ключа, публичный IP, SSH host."""
+    """Заполнить ``config.effective_domain_or_ip`` по приоритету: FQDN, публичный IP, SSH host."""
     if config.domain and config.domain.strip():
         config.effective_domain_or_ip = config.domain.strip()
         log(f"[Группа: домен] Указанный FQDN: {config.effective_domain_or_ip}")
-        return
-    if config.domain_client_key and config.domain_client_key.strip():
-        try:
-            fqdn = resolve_domain_fqdn(config.domain_client_key)
-            config.effective_domain_or_ip = fqdn
-            log(f"[Группа: домен] FQDN по ключу сервиса: {config.effective_domain_or_ip}")
-        except Exception as ex:
-            log(f"[Группа: домен] Ошибка сервиса домена: {ex}, используем host.")
-            config.effective_domain_or_ip = config.host
         return
     if _want_public_ip(config):
         config.effective_domain_or_ip = _resolve_public_target(session, config, log)
@@ -142,9 +150,7 @@ def _maybe_reconnect_session(
     log: LogFn,
 ) -> SSHSession:
     """Закрыть сессию и открыть заново, если менялись порт или пароль root; иначе вернуть ту же сессию."""
-    post_port = config.new_ssh_port if config.new_ssh_port is not None else config.port
-    post_pw = config.new_root_password.strip() or config.root_password
-    post_key = config.root_private_key.strip()
+    post_port, post_pw, post_key = _post_connect_params(config)
     need_reconnect = post_port != config.port or bool(config.new_root_password.strip())
     if not need_reconnect:
         return session
@@ -177,18 +183,12 @@ def _request_reboot(session: SSHSession, log: LogFn) -> None:
 
 def _poll_ssh_after_reboot(config: ProvisionConfig, log: LogFn, *, prior_auth: str = "") -> None:
     """Дождаться восстановления SSH после reboot (best-effort)."""
-
-    post_port = config.new_ssh_port if config.new_ssh_port is not None else config.port
-    post_pw = config.new_root_password.strip() or config.root_password
-    post_key = config.root_private_key.strip()
+    post_port, post_pw, post_key = _post_connect_params(config)
     try:
         # После reboot: только если сессия была по паролю и пароль меняли — пробуем только пароль.
         prefer = "password" if (prior_auth == "password" and bool(config.new_root_password.strip())) else ""
         s = _poll_ssh_after_finalize(config, post_port, post_pw, post_key, log, prefer_auth=prefer)
-        try:
-            s.close()
-        except Exception:
-            pass
+        _close_session_quietly(s)
     except Exception as ex:
         log(f"[Перезагрузка] Предупреждение: ошибка ожидания SSH после reboot: {ex}")
 
@@ -225,7 +225,8 @@ def run(config: ProvisionConfig, log: LogFn | None = None, artifacts_base: Path 
     """
     Выполнить полную установку по ``config``.
 
-    :returns: каталог артефактов (ключи, ACCESS.txt, пароли).
+    Returns:
+        Каталог артефактов (``ACCESS.txt``, пароли; ключ оператора только при ``auto_setup``).
     """
     lg = log or _log_default
     config.apply_auto_setup()
@@ -251,7 +252,11 @@ def run(config: ProvisionConfig, log: LogFn | None = None, artifacts_base: Path 
     def artifact_persist(label: str) -> None:
         _persist_run_artifacts(bundle, config, access_state, lg, label)
 
-    artifact_persist("после создания каталога артефактов и ключей оператора (до SSH)")
+    artifact_persist(
+        "после создания каталога артефактов"
+        + (" и ключей оператора" if config.auto_setup else "")
+        + " (до SSH)"
+    )
 
     try:
         session.connect()
@@ -298,15 +303,9 @@ def run(config: ProvisionConfig, log: LogFn | None = None, artifacts_base: Path 
         # Перезагрузка — строго после успешной установки.
         prior_auth = session.auth_method
         _request_reboot(session, lg)
-        try:
-            session.close()
-        except Exception:
-            pass
+        _close_session_quietly(session)
         _poll_ssh_after_reboot(config, lg, prior_auth=prior_auth)
 
         return bundle.root
     finally:
-        try:
-            session.close()
-        except Exception:
-            pass
+        _close_session_quietly(session)
