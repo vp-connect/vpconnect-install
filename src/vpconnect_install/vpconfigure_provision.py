@@ -90,7 +90,10 @@ def need_run_04_connect(config: ProvisionConfig) -> bool:
     if config.auto_setup:
         return True
     return bool(
-        config.new_root_password.strip() or config.new_ssh_port is not None or config.new_ssh_public_key.strip()
+        config.new_root_password.strip()
+        or config.new_ssh_port is not None
+        or config.new_ssh_public_key.strip()
+        or config.enable_firewall
     )
 
 
@@ -140,6 +143,8 @@ def run_04_connect_steps(
         _chmod_remote(log, session, pw_file, 30)
         args.append(f"--new-root-password-file {shlex.quote(pw_file)}")
         args.append(f"--new-ssh-port {int(config.new_ssh_port)}")
+        if config.enable_firewall:
+            args.append("--enable-firewall")
         op_pub = f"{home}/vpconnect_operator.pub"
         session.upload_bytes(op_pub, (bundle.public_key_openssh.strip() + "\n").encode("utf-8"))
         _chmod_remote(log, session, op_pub, 30)
@@ -171,6 +176,8 @@ def run_04_connect_steps(
         session.upload_bytes(exf, (ex + "\n").encode("utf-8"))
         _chmod_remote(log, session, exf, 30)
         args.append(f"--ssh-public-key-file {shlex.quote(exf)}")
+    if config.enable_firewall:
+        args.append("--enable-firewall")
     extra = " " + " ".join(args) if args else ""
     _run_configure_script(
         log,

@@ -82,6 +82,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="New SSH port; omit to leave unchanged",
     )
+    p.add_argument(
+        "--enable-firewall",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable firewall on server during 04_setsystemaccess (ufw; default: true for --auto-setup, false otherwise)",
+    )
     p.add_argument("--new-ssh-public-key", default=None, help="Extra OpenSSH public line for root")
     p.add_argument("--new-ssh-public-key-file", default=None)
     p.add_argument("--domain", default=None, help="Manual FQDN for URLs (APP_DOMAIN)")
@@ -176,6 +182,12 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
         ns.domain_client_key_file,
     )
 
+    enable_fw: bool
+    if ns.enable_firewall is None:
+        enable_fw = bool(ns.auto_setup)
+    else:
+        enable_fw = bool(ns.enable_firewall)
+
     return ProvisionConfig(
         host=ns.host,
         port=ns.port,
@@ -187,6 +199,7 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
         new_root_password=new_root,
         new_ssh_port=ns.new_ssh_port,
         new_ssh_public_key=extra_pub,
+        enable_firewall=enable_fw,
         set_domain=False,
         domain=domain,
         domain_client_key=dom_key,

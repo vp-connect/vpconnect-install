@@ -58,7 +58,8 @@ python -m vpconnect_install --help
 
 **`--auto-setup` (по умолчанию):** WireGuard + MTProxy + VPManage, новый пароль root, SSH-порт **2222** (если не задан), публичный IP на сервере для URL при отсутствии домена/ключа домена, генерация `VPM_PASSWORD` при пустом значении.
 
-**`--no-auto-setup`:** явно `--set-wireguard` / `--set-mtproxy` / `--set-vpmanage`. Без `--new-ssh-port` порт SSH не меняется.
+**`--no-auto-setup`:** явно `--set-wireguard` / `--set-mtproxy` / `--set-vpmanage`. Без `--new-ssh-port` порт SSH не меняется.  
+Файервол на сервере (ufw) включается опционально флагом **`--enable-firewall`** (шаг `04_setsystemaccess.sh`).
 
 **Эффективный хост для URL (домен / IP):**
 

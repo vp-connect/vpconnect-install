@@ -80,6 +80,7 @@ def _build_config(
     new_root: str,
     new_ssh: int | None,
     extra_pub: str,
+    enable_firewall: bool,
     set_domain: bool,
     domain: str,
     domain_client_key: str,
@@ -112,6 +113,7 @@ def _build_config(
         new_root_password=new_root if set_new_connect else "",
         new_ssh_port=new_ssh if set_new_connect else None,
         new_ssh_public_key=extra_pub.strip() if set_new_connect else "",
+        enable_firewall=bool(enable_firewall) if set_new_connect else False,
         set_domain=set_domain,
         domain=dom,
         domain_client_key=dkey,
@@ -145,6 +147,8 @@ class ProvisionerGUI:
         self._running = False
 
         self.auto_setup_var = tk.BooleanVar(value=True)
+        # Общая переменная для "Ключ сервиса домена" (дублированный ввод в упрощённом и расширенном режимах).
+        self.domain_key_var = tk.StringVar(value="")
 
         frm = ttk.Frame(self.root, padding=8)
         self.frm = frm
@@ -214,6 +218,10 @@ class ProvisionerGUI:
         self.vpconfigure_repo_ent = ttk.Entry(conn, width=42)
         self.vpconfigure_repo_ent.insert(0, d.VPCONFIGURE_REPO_URL_DEFAULT)
         self.vpconfigure_repo_ent.grid(row=cr, column=1, sticky="ew", padx=4)
+        cr += 1
+        ttk.Label(conn, text="Ключ сервиса домена").grid(row=cr, column=0, sticky="e")
+        self.domain_key_top_ent = ttk.Entry(conn, width=42, textvariable=self.domain_key_var)
+        self.domain_key_top_ent.grid(row=cr, column=1, sticky="ew", padx=4)
 
         self.advanced_frame = ttk.Frame(frm)
         self.advanced_frame.grid(row=r, column=0, columnspan=2, sticky="ew", pady=4)
@@ -223,6 +231,7 @@ class ProvisionerGUI:
 
         ar = 0
         self.set_nc_var = tk.BooleanVar(value=False)
+        self.enable_fw_var = tk.BooleanVar(value=True)
         nc = ttk.LabelFrame(af, text="Настройка подключения (на сервере)", padding=6)
         nc.grid(row=ar, column=0, columnspan=2, sticky="ew", pady=4)
         nc.columnconfigure(1, weight=1)
@@ -238,6 +247,9 @@ class ProvisionerGUI:
         ttk.Label(nc, text="Новый SSH Public key").grid(row=3, column=0, sticky="e")
         self.extra_pub = ttk.Entry(nc, width=40)
         self.extra_pub.grid(row=3, column=1, sticky="ew", padx=4)
+        ttk.Label(nc, text="Включить файервол (ufw)").grid(row=4, column=0, sticky="e")
+        self.enable_fw_cb = ttk.Checkbutton(nc, text="", variable=self.enable_fw_var)
+        self.enable_fw_cb.grid(row=4, column=1, sticky="w", padx=4, pady=(2, 0))
         self._nc_widgets = [self.new_root, self.new_ssh, self.extra_pub]
         ar += 1
 
@@ -252,7 +264,7 @@ class ProvisionerGUI:
         self.domain_ent = ttk.Entry(domf, width=40)
         self.domain_ent.grid(row=1, column=1, sticky="ew", padx=4)
         ttk.Label(domf, text="Ключ сервиса домена").grid(row=2, column=0, sticky="e")
-        self.domain_key_ent = ttk.Entry(domf, width=40, show="*")
+        self.domain_key_ent = ttk.Entry(domf, width=40, textvariable=self.domain_key_var)
         self.domain_key_ent.grid(row=2, column=1, sticky="ew", padx=4)
         self._dom_widgets = [self.domain_ent, self.domain_key_ent]
         ar += 1
@@ -343,6 +355,10 @@ class ProvisionerGUI:
     def _toggle_nc(self) -> None:
         st = "disabled" if not self.set_nc_var.get() else "!disabled"
         self._state_widgets(self._nc_widgets, st)
+        if not self.set_nc_var.get():
+            self.enable_fw_cb.state(["disabled"])
+        else:
+            self.enable_fw_cb.state(["!disabled"])
 
     def _toggle_dom(self) -> None:
         on = self.set_dom_var.get()
@@ -440,9 +456,10 @@ class ProvisionerGUI:
                 new_root=self.new_root.get(),
                 new_ssh=_parse_optional_port(self.new_ssh) if not auto else None,
                 extra_pub=self.extra_pub.get(),
+                enable_firewall=self.enable_fw_var.get() if not auto else True,
                 set_domain=self.set_dom_var.get() if not auto else False,
                 domain=self.domain_ent.get(),
-                domain_client_key=self.domain_key_ent.get(),
+                domain_client_key=self.domain_key_var.get(),
                 vpconfigure_repo_url=self.vpconfigure_repo_ent.get(),
                 set_wg=self.set_wg_var.get(),
                 wg_port=_parse_int(self.wg_port, d.WG_PORT_DEFAULT),

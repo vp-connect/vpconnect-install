@@ -35,6 +35,7 @@ class ProvisionConfig:
     new_root_password: str = ""
     new_ssh_port: int | None = None
     new_ssh_public_key: str = ""
+    enable_firewall: bool = False
 
     # GUI: master toggle for domain section
     set_domain: bool = False
@@ -75,7 +76,9 @@ class ProvisionConfig:
         if not self.auto_setup:
             return
         self.domain = None
-        self.domain_client_key = ""
+        # В auto_setup домен обычно определяется по внешнему IP.
+        # Но если пользователь задал ключ сервиса домена — не затираем его (05_setdomain сможет получить FQDN).
+        self.domain_client_key = self.domain_client_key.strip()
         # Упрощённый режим: всегда новый пароль, порт 2222, только ключ оператора из артефактов (не поле extra).
         if not self.new_root_password.strip():
             self.new_root_password = secrets.token_urlsafe(d.SECRET_TOKEN_BYTES)
