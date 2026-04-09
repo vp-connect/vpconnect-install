@@ -163,6 +163,8 @@ def write_access_file(
                 f"VPManage URL: http://{target}:{config.vpm_http_port}/",
             ]
         )
+        if config.vpm_password.strip():
+            lines.append(f"VPManage admin password: {config.vpm_password.strip()}")
     lines.extend(
         [
             "",

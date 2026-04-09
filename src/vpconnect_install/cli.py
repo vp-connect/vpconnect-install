@@ -129,7 +129,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--wg-client-config-path", default=d.WG_CLIENT_CONFIG_PATH_DEFAULT)
     p.add_argument("--mtproxy-port", type=int, default=d.MTPROXY_PORT_DEFAULT)
     p.add_argument("--vpm-http-port", type=int, default=d.VPM_HTTP_PORT_DEFAULT)
-    p.add_argument("--vpm-password", default=None, help="env VPM_PASSWORD")
+    p.add_argument(
+        "--vpm-password",
+        default=None,
+        help="VPManage admin password (env VPM_PASSWORD); if omitted, generated on server (08)",
+    )
     p.add_argument("--vpm-password-file", default=None)
     p.add_argument("--git-url", default=d.GIT_URL)
     p.add_argument("--git-branch", default=d.GIT_BRANCH)

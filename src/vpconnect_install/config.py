@@ -85,15 +85,13 @@ class ProvisionConfig:
         if self.new_ssh_port is None:
             self.new_ssh_port = 2222
         self.new_ssh_public_key = ""
-        if self.set_vpmanage and not self.vpm_password.strip():
-            self.vpm_password = secrets.token_urlsafe(d.SECRET_TOKEN_BYTES)
+        # VPManage: пустой пароль — генерируется на сервере в 08_setvpmanage.sh (10 символов A–Za–z0–9),
+        # возвращается в result:… password:… и подставляется в config после шага 08.
 
     def validate(self) -> None:
         _validate_required_ports(self)
         _validate_ssh_credentials(self)
         _validate_vpconfigure_repo(self)
-        if self.set_vpmanage and not self.vpm_password.strip():
-            raise ValueError("vpm_password is required when set_vpmanage (run apply_auto_setup or set a password)")
         _validate_domain_manual(self)
 
 

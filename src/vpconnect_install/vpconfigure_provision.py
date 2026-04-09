@@ -38,6 +38,20 @@ def _mtproxy_secret_path_from_07_stdout(stdout: str) -> str | None:
     return None
 
 
+def _vpm_password_from_08_stdout(stdout: str) -> str | None:
+    """Поле password:… в строке result: из stdout 08_setvpmanage.sh (админка VPManage)."""
+    _st, _msg, _br, line1 = parse_configure_result_line(stdout)
+    if not line1:
+        return None
+    for seg in line1.split(";"):
+        seg = seg.strip()
+        key, sep, val = seg.partition(":")
+        if sep and key.strip().lower() == "password":
+            v = val.strip()
+            return v or None
+    return None
+
+
 def _run_configure_script(
     log: LogFn,
     session: SSHSession,
@@ -290,7 +304,7 @@ def run_vpconfigure_phases_05_to_08(
         if config.vpm_password.strip():
             vp_args.append(f"--vpm-password {shlex.quote(config.vpm_password.strip())}")
         extra = " " + " ".join(vp_args)
-        _run_configure_script(
+        out_08 = _run_configure_script(
             log,
             session,
             configure_dir,
@@ -300,6 +314,9 @@ def run_vpconfigure_phases_05_to_08(
             tmo,
             blank_before=True,
         )
+        parsed_pw = _vpm_password_from_08_stdout(out_08)
+        if parsed_pw:
+            config.vpm_password = parsed_pw
         artifact_persist("после 08_setvpmanage.sh")
         ran_any_step = True
 

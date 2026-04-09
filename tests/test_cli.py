@@ -59,11 +59,11 @@ def test_new_ssh_port_optional() -> None:
     assert cfg.new_ssh_port is None
 
 
-def test_apply_auto_generates_vpm_password() -> None:
+def test_apply_auto_vpm_password_optional_until_08() -> None:
     p = build_arg_parser()
     ns = p.parse_args(["--host", "10.0.0.1", "--root-password", "x"])
     cfg = config_from_args(ns)
     cfg.apply_auto_setup()
     cfg.validate()
-    assert cfg.vpm_password
     assert cfg.new_root_password
+    assert cfg.vpm_password == ""
