@@ -17,6 +17,7 @@ import requests
 
 from vpconnect_install import defaults as d
 from vpconnect_install.config import ProvisionConfig
+from vpconnect_install.remote_port_precheck import assert_remote_listen_ports_free
 from vpconnect_install.remote_scripts_fetch import github_raw_file_url
 from vpconnect_install.ssh_session import SSHSession
 
@@ -315,6 +316,9 @@ def run_vpconnect_configure_bootstrap(
 
         if _configure_step_failed(status, code):
             abort_configure_on_failure(log, name, message, out, err, line1)
+
+        if name == "00_bashinstall.sh":
+            assert_remote_listen_ports_free(session, config, log, timeout)
 
         if on_script_ok:
             on_script_ok(name)

@@ -16,6 +16,9 @@ def _exec_bootstrap(cmd: str, timeout: object = None) -> tuple[int, str, str]:
         return (0, "/root\n", "")
     if cmd.startswith("chmod +x"):
         return (0, "", "")
+    # Предпроверка портов (remote_port_precheck): отдельный bash -lc со встроенным скриптом
+    if "sport = :" in cmd and "check_tcp_ss" in cmd:
+        return (0, "", "")
     if "bash -lc" not in cmd:
         return (99, "", f"unexpected cmd head: {cmd[:40]}")
     if "00_bashinstall.sh" in cmd:
