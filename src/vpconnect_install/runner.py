@@ -296,6 +296,7 @@ def run(config: ProvisionConfig, log: LogFn | None = None, artifacts_base: Path 
             config,
             lg,
             config.command_timeout,
+            remote_home=home,
             access_state=access_state,
             artifact_persist=artifact_persist,
         )

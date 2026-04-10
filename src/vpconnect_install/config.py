@@ -53,9 +53,13 @@ class ProvisionConfig:
     wg_port: int = d.WG_PORT_DEFAULT
     wg_client_cert_path: str = d.WG_CLIENT_CERT_PATH_DEFAULT
     wg_client_config_path: str = d.WG_CLIENT_CONFIG_PATH_DEFAULT
+    # Одна строка (wg genkey); при непустом значении загружается на сервер и передаётся в 06_setwireguard.sh
+    wg_server_private_key: str = ""
 
     set_mtproxy: bool = False
     mtproxy_port: int = d.MTPROXY_PORT_DEFAULT
+    # 32 hex или dd+32hex; передаётся в 07_setmtproxy.sh --mtproxy-secret
+    mtproxy_secret: str = ""
 
     set_vpmanage: bool = False
     vpm_http_port: int = d.VPM_HTTP_PORT_DEFAULT

@@ -1,5 +1,6 @@
 # Windows PowerShell: requirements-dev + editable; optional: build [args for build_distribution.py]
 # Syntax: [--system-python] [build [args passed to build_distribution.py...]]
+# ("build" itself is not forwarded to build_distribution.py; same idea as scripts/linux|macos/bootstrap-dist.sh.)
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 Set-Location $RepoRoot

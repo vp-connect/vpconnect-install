@@ -1,10 +1,25 @@
 @echo off
 setlocal EnableExtensions
 rem Windows CMD: venv + requirements.txt + editable install (repo root = 3 levels up from this file).
+rem For PyInstaller + dist/, use bootstrap-dist.bat build (or pass "build" here — we forward to it).
 cd /d "%~dp0..\..\.."
 
 set "USE_SYS=0"
-if /i "%~1"=="--system-python" set "USE_SYS=1"
+:parseopt
+if /i "%~1"=="--system-python" (
+  set "USE_SYS=1"
+  shift
+  goto parseopt
+)
+if /i "%~1"=="build" (
+  call "%~dp0bootstrap-dist.bat" %*
+  exit /b %ERRORLEVEL%
+)
+if not "%~1"=="" (
+  echo Unknown argument: %~1 >&2
+  echo For distribution ^(exe, dist\, zip^): scripts\windows\cmd\bootstrap-dist.bat build >&2
+  exit /b 1
+)
 
 where python >nul 2>&1 || (echo python not found >&2 & exit /b 1)
 python -c "import sys; raise SystemExit(0 if sys.version_info>=(3,10) else 1)" || exit /b 1

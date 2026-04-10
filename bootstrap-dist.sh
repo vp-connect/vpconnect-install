@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
 # Dispatch to OS-specific bootstrap-dist under scripts/.
+# Pass-through: e.g. ./bootstrap-dist.sh build --skip-pyinstaller (see scripts/*/bootstrap-dist.*).
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

@@ -14,11 +14,14 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from vpconnect_install import defaults as d
+from vpconnect_install import gui_captions_ru as gc
+from vpconnect_install import gui_hints_ru as gh
 from vpconnect_install.config import ProvisionConfig
 from vpconnect_install.gui_clipboard import (
     install_text_clipboard_and_context_menu,
     install_ttk_entry_clipboard_and_context_menu,
 )
+from vpconnect_install.gui_extended_hint import bind_extended_hint
 from vpconnect_install.outputs import open_directory_in_file_manager
 from vpconnect_install.runner import run
 
@@ -89,8 +92,10 @@ def _build_config(
     wg_port: int,
     wg_cert: str,
     wg_conf: str,
+    wg_server_private_key: str,
     set_mt: bool,
     mt_port: int,
+    mtproxy_secret: str,
     set_vpm: bool,
     vpm_http: int,
     vpm_pw: str,
@@ -119,8 +124,10 @@ def _build_config(
         wg_port=wg_port,
         wg_client_cert_path=wg_cert.strip() or d.WG_CLIENT_CERT_PATH_DEFAULT,
         wg_client_config_path=wg_conf.strip() or d.WG_CLIENT_CONFIG_PATH_DEFAULT,
+        wg_server_private_key=wg_server_private_key.strip(),
         set_mtproxy=set_mt if not auto_setup else True,
         mtproxy_port=mt_port,
+        mtproxy_secret=mtproxy_secret.strip(),
         set_vpmanage=set_vpm if not auto_setup else True,
         vpm_http_port=vpm_http,
         vpm_password=vpm_pw if set_vpm or auto_setup else "",
@@ -137,7 +144,7 @@ class ProvisionerGUI:
 
     def __init__(self) -> None:
         self.root = tk.Tk()
-        self.root.title("vpconnect-install")
+        self.root.title("vpconnect-install 1.0.2")
 
         self._log_q: queue.Queue[str] = queue.Queue()
         self._running = False
@@ -160,66 +167,85 @@ class ProvisionerGUI:
         left_panel.columnconfigure(1, weight=1)
 
         r = 0
-        ttk.Label(
+        banner_lbl = ttk.Label(
             left_panel,
-            text="SSH: сервер — debian / centos / freebsd (vpconnect-configure; подробности в README)",
-        ).grid(row=r, column=0, columnspan=2, sticky="w")
+            text=gc.CAP_BANNER,
+        )
+        banner_lbl.grid(row=r, column=0, columnspan=2, sticky="w")
+        bind_extended_hint(self.root, [banner_lbl], gh.BANNER)
         r += 1
         mode_fr = ttk.Frame(left_panel)
         mode_fr.grid(row=r, column=0, columnspan=2, sticky="w", pady=4)
-        ttk.Label(mode_fr, text="Режим:").pack(side="left", padx=(0, 8))
-        ttk.Radiobutton(
+        mode_lbl = ttk.Label(mode_fr, text=gc.CAP_MODE_LABEL)
+        mode_lbl.pack(side="left", padx=(0, 8))
+        rb_simple = ttk.Radiobutton(
             mode_fr,
-            text="Упрощённый (auto_setup)",
+            text=gc.CAP_MODE_SIMPLE,
             variable=self.auto_setup_var,
             value=True,
             command=self._on_mode_change,
-        ).pack(side="left", padx=4)
-        ttk.Radiobutton(
+        )
+        rb_simple.pack(side="left", padx=4)
+        rb_adv = ttk.Radiobutton(
             mode_fr,
-            text="Расширенный",
+            text=gc.CAP_MODE_ADVANCED,
             variable=self.auto_setup_var,
             value=False,
             command=self._on_mode_change,
-        ).pack(side="left", padx=4)
+        )
+        rb_adv.pack(side="left", padx=4)
+        bind_extended_hint(self.root, [mode_lbl, rb_simple, rb_adv], gh.MODE)
         r += 1
 
-        conn = ttk.LabelFrame(left_panel, text="Подключение", padding=6)
+        conn = ttk.LabelFrame(left_panel, text=gc.CAP_SECTION_CONNECTION, padding=6)
         conn.grid(row=r, column=0, columnspan=2, sticky="ew", pady=4)
         conn.columnconfigure(1, weight=1)
         r += 1
         cr = 0
-        ttk.Label(conn, text="Host").grid(row=cr, column=0, sticky="e")
+        host_lbl = ttk.Label(conn, text=gc.CAP_HOST)
+        host_lbl.grid(row=cr, column=0, sticky="e")
         self.host = ttk.Entry(conn, width=42)
         self.host.grid(row=cr, column=1, sticky="ew", padx=4)
+        bind_extended_hint(self.root, [host_lbl, self.host], gh.HOST)
         cr += 1
-        ttk.Label(conn, text="SSH port").grid(row=cr, column=0, sticky="e")
+        port_lbl = ttk.Label(conn, text=gc.CAP_SSH_PORT)
+        port_lbl.grid(row=cr, column=0, sticky="e")
         self.port = ttk.Entry(conn, width=8)
         self.port.insert(0, "22")
         self.port.grid(row=cr, column=1, sticky="w", padx=4)
+        bind_extended_hint(self.root, [port_lbl, self.port], gh.SSH_PORT)
         cr += 1
-        ttk.Label(conn, text="Root password").grid(row=cr, column=0, sticky="e")
+        root_pw_lbl = ttk.Label(conn, text=gc.CAP_ROOT_PASSWORD)
+        root_pw_lbl.grid(row=cr, column=0, sticky="e")
         self.root_pw = ttk.Entry(conn, width=42)
         self.root_pw.grid(row=cr, column=1, sticky="ew", padx=4)
         _wire_mask_secret_on_blur(self.root_pw)
+        bind_extended_hint(self.root, [root_pw_lbl, self.root_pw], gh.ROOT_PASSWORD)
         cr += 1
-        ttk.Label(conn, text="SSH Private key").grid(row=cr, column=0, sticky="e")
+        key_lbl = ttk.Label(conn, text=gc.CAP_SSH_PRIVATE_KEY)
+        key_lbl.grid(row=cr, column=0, sticky="e")
         key_row = ttk.Frame(conn)
         key_row.grid(row=cr, column=1, sticky="ew", padx=4)
         key_row.columnconfigure(0, weight=1)
         self.root_key = ttk.Entry(key_row, width=36)
         self.root_key.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        ttk.Button(key_row, text="Файл…", command=self._browse_private_key, width=8).grid(row=0, column=1, sticky="e")
+        key_browse_btn = ttk.Button(key_row, text=gc.CAP_BROWSE_FILE, command=self._browse_private_key, width=8)
+        key_browse_btn.grid(row=0, column=1, sticky="e")
+        bind_extended_hint(self.root, [key_lbl, self.root_key, key_browse_btn], gh.SSH_PRIVATE_KEY)
         cr += 1
-        ttk.Label(conn, text="SSH Key passphrase").grid(row=cr, column=0, sticky="e")
+        key_pp_lbl = ttk.Label(conn, text=gc.CAP_SSH_KEY_PASSPHRASE)
+        key_pp_lbl.grid(row=cr, column=0, sticky="e")
         self.root_key_pp = ttk.Entry(conn, width=42)
         self.root_key_pp.grid(row=cr, column=1, sticky="ew", padx=4)
         _wire_mask_secret_on_blur(self.root_key_pp)
+        bind_extended_hint(self.root, [key_pp_lbl, self.root_key_pp], gh.SSH_KEY_PASSPHRASE)
         cr += 1
-        ttk.Label(conn, text="Репозиторий vpconnect-configure").grid(row=cr, column=0, sticky="ne")
+        repo_lbl = ttk.Label(conn, text=gc.CAP_VPCONFIGURE_REPO)
+        repo_lbl.grid(row=cr, column=0, sticky="ne")
         self.vpconfigure_repo_ent = ttk.Entry(conn, width=42)
         self.vpconfigure_repo_ent.insert(0, d.VPCONFIGURE_REPO_URL_DEFAULT)
         self.vpconfigure_repo_ent.grid(row=cr, column=1, sticky="ew", padx=4)
+        bind_extended_hint(self.root, [repo_lbl, self.vpconfigure_repo_ent], gh.VPCONFIGURE_REPO)
 
         self.advanced_frame = ttk.Frame(left_panel)
         self.advanced_frame.grid(row=r, column=0, columnspan=2, sticky="ew", pady=4)
@@ -230,104 +256,140 @@ class ProvisionerGUI:
         ar = 0
         self.set_nc_var = tk.BooleanVar(value=False)
         self.enable_fw_var = tk.BooleanVar(value=True)
-        nc = ttk.LabelFrame(af, text="Настройка подключения (на сервере)", padding=6)
+        nc = ttk.LabelFrame(af, text=gc.CAP_SECTION_NEW_CONNECT, padding=6)
         nc.grid(row=ar, column=0, columnspan=2, sticky="ew", pady=4)
         nc.columnconfigure(1, weight=1)
-        ttk.Checkbutton(nc, text="Включить", variable=self.set_nc_var, command=self._toggle_nc).grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
-        ttk.Label(nc, text="Новый пароль root").grid(row=1, column=0, sticky="e")
+        nc_on = ttk.Checkbutton(nc, text=gc.CAP_ENABLE, variable=self.set_nc_var, command=self._toggle_nc)
+        nc_on.grid(row=0, column=0, columnspan=2, sticky="w")
+        bind_extended_hint(self.root, [nc_on], gh.NEW_CONNECT_ENABLE)
+        nr_lbl = ttk.Label(nc, text=gc.CAP_NEW_ROOT_PASSWORD)
+        nr_lbl.grid(row=1, column=0, sticky="e")
         self.new_root = ttk.Entry(nc, width=40, show="*")
         self.new_root.grid(row=1, column=1, sticky="ew", padx=4)
-        ttk.Label(nc, text="Новый SSH port (пусто = не менять)").grid(row=2, column=0, sticky="e")
+        bind_extended_hint(self.root, [nr_lbl, self.new_root], gh.NEW_ROOT_PASSWORD)
+        ns_lbl = ttk.Label(nc, text=gc.CAP_NEW_SSH_PORT)
+        ns_lbl.grid(row=2, column=0, sticky="e")
         self.new_ssh = ttk.Entry(nc, width=8)
         self.new_ssh.grid(row=2, column=1, sticky="w", padx=4)
-        ttk.Label(nc, text="Новый SSH Public key").grid(row=3, column=0, sticky="e")
+        bind_extended_hint(self.root, [ns_lbl, self.new_ssh], gh.NEW_SSH_PORT)
+        epk_lbl = ttk.Label(nc, text=gc.CAP_NEW_SSH_PUBLIC_KEY)
+        epk_lbl.grid(row=3, column=0, sticky="e")
         self.extra_pub = ttk.Entry(nc, width=40)
         self.extra_pub.grid(row=3, column=1, sticky="ew", padx=4)
-        ttk.Label(nc, text="Включить файервол (ufw)").grid(row=4, column=0, sticky="e")
-        self.enable_fw_cb = ttk.Checkbutton(nc, text="", variable=self.enable_fw_var)
+        bind_extended_hint(self.root, [epk_lbl, self.extra_pub], gh.NEW_SSH_PUBLIC_KEY)
+        fw_lbl = ttk.Label(nc, text=gc.CAP_ENABLE_FIREWALL)
+        fw_lbl.grid(row=4, column=0, sticky="e")
+        self.enable_fw_cb = ttk.Checkbutton(nc, text=gc.CAP_ENABLE_FIREWALL_CHECKBOX, variable=self.enable_fw_var)
         self.enable_fw_cb.grid(row=4, column=1, sticky="w", padx=4, pady=(2, 0))
+        bind_extended_hint(self.root, [fw_lbl, self.enable_fw_cb], gh.ENABLE_FIREWALL)
         self._nc_widgets = [self.new_root, self.new_ssh, self.extra_pub]
         ar += 1
 
         self.set_dom_var = tk.BooleanVar(value=False)
-        domf = ttk.LabelFrame(af, text="Домен", padding=6)
+        domf = ttk.LabelFrame(af, text=gc.CAP_SECTION_DOMAIN, padding=6)
         domf.grid(row=ar, column=0, columnspan=2, sticky="ew", pady=4)
         domf.columnconfigure(1, weight=1)
-        ttk.Checkbutton(domf, text="Настроить домен", variable=self.set_dom_var, command=self._toggle_dom).grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
-        ttk.Label(domf, text="Домен (FQDN)").grid(row=1, column=0, sticky="e")
+        dom_on = ttk.Checkbutton(domf, text=gc.CAP_SET_DOMAIN, variable=self.set_dom_var, command=self._toggle_dom)
+        dom_on.grid(row=0, column=0, columnspan=2, sticky="w")
+        bind_extended_hint(self.root, [dom_on], gh.DOMAIN_ENABLE)
+        dom_lbl = ttk.Label(domf, text=gc.CAP_DOMAIN_FQDN)
+        dom_lbl.grid(row=1, column=0, sticky="e")
         self.domain_ent = ttk.Entry(domf, width=40)
         self.domain_ent.grid(row=1, column=1, sticky="ew", padx=4)
+        bind_extended_hint(self.root, [dom_lbl, self.domain_ent], gh.DOMAIN_FQDN)
         self._dom_widgets = [self.domain_ent]
         ar += 1
 
         self.set_wg_var = tk.BooleanVar(value=True)
-        wgf = ttk.LabelFrame(af, text="WireGuard", padding=6)
+        wgf = ttk.LabelFrame(af, text=gc.CAP_SECTION_WIREGUARD, padding=6)
         wgf.grid(row=ar, column=0, columnspan=2, sticky="ew", pady=4)
-        ttk.Checkbutton(wgf, text="Установить", variable=self.set_wg_var, command=self._toggle_wg).grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Label(wgf, text="Порт UDP").grid(row=1, column=0, sticky="e")
+        wgf.columnconfigure(1, weight=1)
+        wg_on = ttk.Checkbutton(wgf, text=gc.CAP_INSTALL, variable=self.set_wg_var, command=self._toggle_wg)
+        wg_on.grid(row=0, column=0, sticky="w")
+        bind_extended_hint(self.root, [wg_on], gh.WIREGUARD_ENABLE)
+        wgp_lbl = ttk.Label(wgf, text=gc.CAP_WG_UDP_PORT)
+        wgp_lbl.grid(row=1, column=0, sticky="e")
         self.wg_port = ttk.Entry(wgf, width=8)
         self.wg_port.insert(0, str(d.WG_PORT_DEFAULT))
         self.wg_port.grid(row=1, column=1, sticky="w", padx=4)
-        ttk.Label(wgf, text="client_cert (сервер)").grid(row=2, column=0, sticky="e")
+        bind_extended_hint(self.root, [wgp_lbl, self.wg_port], gh.WIREGUARD_UDP_PORT)
+        wgc_lbl = ttk.Label(wgf, text=gc.CAP_WG_CLIENT_CERT)
+        wgc_lbl.grid(row=2, column=0, sticky="e")
         self.wg_cert = ttk.Entry(wgf, width=40)
         self.wg_cert.insert(0, d.WG_CLIENT_CERT_PATH_DEFAULT)
         self.wg_cert.grid(row=2, column=1, sticky="ew", padx=4)
-        ttk.Label(wgf, text="client_config (сервер)").grid(row=3, column=0, sticky="e")
+        bind_extended_hint(self.root, [wgc_lbl, self.wg_cert], gh.WIREGUARD_CLIENT_CERT_PATH)
+        wgf_lbl = ttk.Label(wgf, text=gc.CAP_WG_CLIENT_CONFIG)
+        wgf_lbl.grid(row=3, column=0, sticky="e")
         self.wg_conf = ttk.Entry(wgf, width=40)
         self.wg_conf.insert(0, d.WG_CLIENT_CONFIG_PATH_DEFAULT)
         self.wg_conf.grid(row=3, column=1, sticky="ew", padx=4)
-        self._wg_widgets = [self.wg_port, self.wg_cert, self.wg_conf]
+        bind_extended_hint(self.root, [wgf_lbl, self.wg_conf], gh.WIREGUARD_CLIENT_CONFIG_PATH)
+        wgs_lbl = ttk.Label(wgf, text=gc.CAP_WG_SERVER_PRIVATE_KEY)
+        wgs_lbl.grid(row=4, column=0, sticky="ne")
+        self.wg_server_priv = ttk.Entry(wgf, width=40)
+        self.wg_server_priv.grid(row=4, column=1, sticky="ew", padx=4)
+        bind_extended_hint(self.root, [wgs_lbl, self.wg_server_priv], gh.WIREGUARD_SERVER_PRIVATE_KEY_REUSE)
+        self._wg_widgets = [self.wg_port, self.wg_cert, self.wg_conf, self.wg_server_priv]
         ar += 1
 
         self.set_mt_var = tk.BooleanVar(value=True)
-        mtf = ttk.LabelFrame(af, text="MTProxy", padding=6)
+        mtf = ttk.LabelFrame(af, text=gc.CAP_SECTION_MTPROXY, padding=6)
         mtf.grid(row=ar, column=0, columnspan=2, sticky="ew", pady=4)
-        ttk.Checkbutton(mtf, text="Установить", variable=self.set_mt_var, command=self._toggle_mt).grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Label(mtf, text="TCP порт").grid(row=1, column=0, sticky="e")
+        mtf.columnconfigure(1, weight=1)
+        mt_on = ttk.Checkbutton(mtf, text=gc.CAP_INSTALL, variable=self.set_mt_var, command=self._toggle_mt)
+        mt_on.grid(row=0, column=0, sticky="w")
+        bind_extended_hint(self.root, [mt_on], gh.MTPROXY_ENABLE)
+        mtp_lbl = ttk.Label(mtf, text=gc.CAP_MTPROXY_TCP_PORT)
+        mtp_lbl.grid(row=1, column=0, sticky="e")
         self.mt_port = ttk.Entry(mtf, width=8)
         self.mt_port.insert(0, str(d.MTPROXY_PORT_DEFAULT))
         self.mt_port.grid(row=1, column=1, sticky="w", padx=4)
-        self._mt_widgets = [self.mt_port]
+        bind_extended_hint(self.root, [mtp_lbl, self.mt_port], gh.MTPROXY_TCP_PORT)
+        mts_lbl = ttk.Label(mtf, text=gc.CAP_MTPROXY_SECRET)
+        mts_lbl.grid(row=2, column=0, sticky="e")
+        self.mtproxy_secret_ent = ttk.Entry(mtf, width=40)
+        self.mtproxy_secret_ent.grid(row=2, column=1, sticky="ew", padx=4)
+        bind_extended_hint(self.root, [mts_lbl, self.mtproxy_secret_ent], gh.MTPROXY_SECRET_REUSE)
+        self._mt_widgets = [self.mt_port, self.mtproxy_secret_ent]
         ar += 1
 
         self.set_vpm_var = tk.BooleanVar(value=True)
-        vpmf = ttk.LabelFrame(af, text="VPManage", padding=6)
+        vpmf = ttk.LabelFrame(af, text=gc.CAP_SECTION_VPMANAGE, padding=6)
         vpmf.grid(row=ar, column=0, columnspan=2, sticky="ew", pady=4)
-        ttk.Checkbutton(vpmf, text="Установить", variable=self.set_vpm_var, command=self._toggle_vpm).grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Label(vpmf, text="HTTP порт").grid(row=1, column=0, sticky="e")
+        vpm_on = ttk.Checkbutton(vpmf, text=gc.CAP_INSTALL, variable=self.set_vpm_var, command=self._toggle_vpm)
+        vpm_on.grid(row=0, column=0, sticky="w")
+        bind_extended_hint(self.root, [vpm_on], gh.VPMANAGE_ENABLE)
+        vpmh_lbl = ttk.Label(vpmf, text=gc.CAP_VPM_HTTP_PORT)
+        vpmh_lbl.grid(row=1, column=0, sticky="e")
         self.vpm_http = ttk.Entry(vpmf, width=8)
         self.vpm_http.insert(0, str(d.VPM_HTTP_PORT_DEFAULT))
         self.vpm_http.grid(row=1, column=1, sticky="w", padx=4)
-        ttk.Label(vpmf, text="Пароль (пусто = сгенерировать)").grid(row=2, column=0, sticky="e")
+        bind_extended_hint(self.root, [vpmh_lbl, self.vpm_http], gh.VPMANAGE_HTTP_PORT)
+        vpmp_lbl = ttk.Label(vpmf, text=gc.CAP_VPM_PASSWORD)
+        vpmp_lbl.grid(row=2, column=0, sticky="e")
         self.vpm_pw = ttk.Entry(vpmf, width=40, show="*")
         self.vpm_pw.grid(row=2, column=1, sticky="ew", padx=4)
+        bind_extended_hint(self.root, [vpmp_lbl, self.vpm_pw], gh.VPMANAGE_PASSWORD)
         self._vpm_widgets = [self.vpm_http, self.vpm_pw]
 
         bf = ttk.Frame(left_panel)
         bf.grid(row=r, column=0, columnspan=2, pady=8)
-        self.btn_start = ttk.Button(bf, text="Start", command=self._on_start)
+        self.btn_start = ttk.Button(bf, text=gc.CAP_START, command=self._on_start)
         self.btn_start.pack(side="left", padx=4)
-        ttk.Button(bf, text="Exit", command=self.root.destroy).pack(side="left", padx=4)
+        ttk.Button(bf, text=gc.CAP_EXIT, command=self.root.destroy).pack(side="left", padx=4)
 
         self.log_outer = ttk.Frame(frm)
         self.log_outer.grid(row=0, column=1, sticky="nsew")
         self.log_outer.columnconfigure(0, weight=1)
         self.log_outer.rowconfigure(1, weight=1)
-        ttk.Label(self.log_outer, text="Log").grid(row=0, column=0, sticky="nw")
+        log_lbl = ttk.Label(self.log_outer, text=gc.CAP_LOG)
+        log_lbl.grid(row=0, column=0, sticky="nw")
         self.log_widget = scrolledtext.ScrolledText(
             self.log_outer, height=_LOG_LINES_MIN_STRETCH, state="disabled", wrap="word"
         )
         self.log_widget.grid(row=1, column=0, sticky="nsew", pady=(0, 4))
+        bind_extended_hint(self.root, [log_lbl, self.log_widget], gh.LOG_PANEL)
 
         self.root.after(200, self._drain_log)
         install_ttk_entry_clipboard_and_context_menu(self.root)
@@ -484,8 +546,10 @@ class ProvisionerGUI:
                 wg_port=_parse_int(self.wg_port, d.WG_PORT_DEFAULT),
                 wg_cert=self.wg_cert.get(),
                 wg_conf=self.wg_conf.get(),
+                wg_server_private_key=self.wg_server_priv.get(),
                 set_mt=self.set_mt_var.get(),
                 mt_port=_parse_int(self.mt_port, d.MTPROXY_PORT_DEFAULT),
+                mtproxy_secret=self.mtproxy_secret_ent.get(),
                 set_vpm=self.set_vpm_var.get(),
                 vpm_http=_parse_int(self.vpm_http, d.VPM_HTTP_PORT_DEFAULT),
                 vpm_pw=self.vpm_pw.get(),

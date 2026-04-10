@@ -12,7 +12,7 @@
 - **ОС:** **Windows** 10/11, **Linux**, **macOS** — везде, где доступны зависимости (`paramiko`, `cryptography`, `requests`) и стандартный **Tkinter** (для GUI; на минимальных установках Linux может понадобиться пакет `python3-tk`).
 - Сеть: SSH до сервера, **GitHub** `raw.githubusercontent.com` (скрипты **00–03**), клонирование репозитория по `--vpconfigure-repo-url`.
 
-Корневые **`./bootstrap.sh`** и **`./bootstrap-dist.sh`** определяют ОС и вызывают скрипт из [`scripts/`](scripts/README.md) (Linux / macOS / Windows **CMD**). На Windows из **PowerShell** удобнее сразу `scripts\windows\ps\*.ps1`. Ручная установка Python и venv тоже возможна.
+Корневые **`./bootstrap.sh`** и **`./bootstrap-dist.sh`** определяют ОС и вызывают скрипт из [`scripts/`](scripts/README.md) (Linux / macOS / Windows **CMD**). На Windows из **PowerShell** удобнее сразу `scripts\windows\ps\*.ps1`. Ручная установка Python и venv тоже возможна. Чтобы после подготовки venv сразу собрать **`dist/`**, передайте **`build`**: **`./bootstrap.sh build`**, **`scripts\windows\cmd\bootstrap.bat build`**, **`.\scripts\windows\ps\bootstrap.ps1 build`** (эквивалентно вызову соответствующего **`bootstrap-dist`** с теми же аргументами).
 
 ### Сборка GUI (дистрибутив)
 
@@ -73,7 +73,7 @@ python -m vpconnect_install --help
 
 ## CLI
 
-Кратко о платформах см. в конце вывода **`python -m vpconnect_install --help`** (epilog: Python 3.10+ и три семейства целевой ОС).
+Кратко о платформах см. в конце вывода **`python -m vpconnect_install --help`** (epilog: Python 3.10+ и три семейства целевой ОС). Параметры WireGuard, MTProxy и VPManage в справке сгруппированы в отдельные секции.
 
 **Аутентификация:** сначала `--root-private-key`, иначе пароль (`--root-password` / `ROOT_PASSWORD`).
 
@@ -90,7 +90,9 @@ python -m vpconnect_install --help
 
 **Репозиторий vpconnect-configure:** `--vpconfigure-repo-url` (по умолчанию в `defaults.py`).
 
-Флаги отдельных сценариев на сервере (например, **`07_setmtproxy.sh`**: опциональный **`--mtproxy-secret`** для hex-секрета MTProxy) описаны в [README vpconnect-configure](https://github.com/vp-connect/vpconnect-configure/blob/main/README.md).
+**Переустановка без смены ключей для клиентов:** опционально **`--wg-server-private-key-file`** (одна строка, вывод `wg genkey`) — в **`06_setwireguard.sh`** подставляется существующий приватный ключ сервера; **`--mtproxy-secret`** или **`--mtproxy-secret-file`** / **`MTPROXY_SECRET`** — тот же секрет, что в ссылке **`tg://proxy`** (32 hex или `dd` + 32 hex), передаётся в **`07_setmtproxy.sh`**.
+
+Остальные флаги сценариев на сервере — в [README vpconnect-configure](https://github.com/vp-connect/vpconnect-configure/blob/main/README.md).
 
 Пример (расширенный режим, опционально новый SSH-порт):
 
@@ -102,7 +104,7 @@ python -m vpconnect_install --host 203.0.113.10 --no-auto-setup \
   --domain example.com
 ```
 
-Переменные окружения (опционально): `ROOT_PASSWORD`, `NEW_ROOT_PASSWORD`, `VPM_PASSWORD`, `ROOT_KEY_PASSPHRASE`.
+Переменные окружения (опционально): `ROOT_PASSWORD`, `NEW_ROOT_PASSWORD`, `VPM_PASSWORD`, `ROOT_KEY_PASSPHRASE`, `MTPROXY_SECRET`.
 
 ## GUI
 
@@ -113,7 +115,7 @@ python -m vpconnect_install gui
 Строка под заголовком окна напоминает три семейства целевой ОС; подробности — в разделе **«Поддерживаемые версии и платформы»**.
 
 - **Упрощённый** режим: только подключение и URL репозитория; соответствует `auto_setup`.
-- **Расширенный:** блоки (подключение на сервере, домен, WireGuard, MTProxy, VPManage) с чекбоксами.
+- **Расширенный:** блоки (подключение на сервере, домен, WireGuard, MTProxy, VPManage) с чекбоксами. В секциях **WireGuard** и **MTProxy** — опциональные поля **приватного ключа сервера** и **секрета MTProxy** для переустановки без смены клиентских конфигов/ссылок.
 
 По успеху в лог выводится путь к артефактам и открывается каталог в файловом менеджере.
 

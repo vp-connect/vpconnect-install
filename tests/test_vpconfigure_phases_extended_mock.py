@@ -124,6 +124,7 @@ def test_phases_05_only_domain(mock_run: MagicMock) -> None:
         cfg,
         lambda _m: None,
         60,
+        remote_home="/root",
         access_state=st,
         artifact_persist=lambda _x: None,
     )
@@ -148,12 +149,65 @@ def test_phases_06_wireguard_downloads_key(mock_run: MagicMock) -> None:
         cfg,
         lambda _m: None,
         60,
+        remote_home="/root",
         access_state=AccessFileState(),
         artifact_persist=lambda _x: None,
     )
     assert session.download_bytes.called
     scripts = [c[0][3] for c in mock_run.call_args_list]
     assert "06_setwireguard.sh" in scripts
+
+
+@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+def test_phases_06_wg_server_private_key_uploaded(mock_run: MagicMock) -> None:
+    session = MagicMock()
+    session.exec_command.return_value = (0, "", "")
+    session.download_bytes.return_value = b"pub\n"
+    cfg = _cfg(auto_setup=False, set_wireguard=True, set_domain=False, domain=None)
+    cfg.set_mtproxy = False
+    cfg.set_vpmanage = False
+    cfg.wg_server_private_key = "  MYWGKEY  \n"
+    mock_run.return_value = "result:success; message:ok\n"
+    run_vpconfigure_phases_05_to_08(
+        session,
+        "/cfg",
+        "debian",
+        cfg,
+        lambda _m: None,
+        60,
+        remote_home="/root",
+        access_state=AccessFileState(),
+        artifact_persist=lambda _x: None,
+    )
+    session.upload_bytes.assert_called()
+    wg_extra = [c[0][5] for c in mock_run.call_args_list if c[0][3] == "06_setwireguard.sh"][0]
+    assert "--wg-server-private-key-file" in wg_extra
+    assert "/root/.vpconnect_wg_server_private_key" in wg_extra
+    rm_calls = [a[0][0] for a in session.exec_command.call_args_list]
+    assert any("rm -f" in c and ".vpconnect_wg_server_private_key" in c for c in rm_calls)
+
+
+@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+def test_phases_07_passes_mtproxy_secret(mock_run: MagicMock) -> None:
+    session = MagicMock()
+    session.download_bytes.return_value = b"ab"
+    cfg = _cfg(auto_setup=False, set_wireguard=False, set_mtproxy=True, set_domain=False, domain=None)
+    cfg.mtproxy_secret = "dd0123456789abcdef0123456789abcdef"
+    mock_run.return_value = "result:success; message:ok\n"
+    run_vpconfigure_phases_05_to_08(
+        session,
+        "/cfg",
+        "debian",
+        cfg,
+        lambda _m: None,
+        60,
+        remote_home="/root",
+        access_state=AccessFileState(),
+        artifact_persist=lambda _x: None,
+    )
+    mt_extra = [c[0][5] for c in mock_run.call_args_list if c[0][3] == "07_setmtproxy.sh"][0]
+    assert "--mtproxy-secret" in mt_extra
+    assert "dd0123456789abcdef0123456789abcdef" in mt_extra
 
 
 @patch("vpconnect_install.vpconfigure_provision._run_configure_script")
@@ -170,6 +224,7 @@ def test_phases_07_mtproxy_uses_default_secret_path(mock_run: MagicMock) -> None
         cfg,
         lambda _m: None,
         60,
+        remote_home="/root",
         access_state=st,
         artifact_persist=lambda _x: None,
     )
@@ -196,6 +251,7 @@ def test_phases_08_with_explicit_vpm_password(mock_run: MagicMock) -> None:
         cfg,
         lambda _m: None,
         60,
+        remote_home="/root",
         access_state=AccessFileState(),
         artifact_persist=lambda _x: None,
     )
@@ -223,6 +279,7 @@ def test_phases_08_parses_password(mock_run: MagicMock) -> None:
         cfg,
         lambda _m: None,
         60,
+        remote_home="/root",
         access_state=AccessFileState(),
         artifact_persist=lambda _x: None,
     )
@@ -244,6 +301,7 @@ def test_phases_none_enabled_persist_message(mock_run: MagicMock) -> None:
         cfg,
         lambda _m: None,
         60,
+        remote_home="/root",
         access_state=AccessFileState(),
         artifact_persist=persisted.append,
     )
@@ -265,6 +323,7 @@ def test_phases_07_download_failure_logged(mock_run: MagicMock) -> None:
         cfg,
         logs.append,
         60,
+        remote_home="/root",
         access_state=AccessFileState(),
         artifact_persist=lambda _x: None,
     )
@@ -287,6 +346,7 @@ def test_phases_06_download_failure_logged(mock_run: MagicMock) -> None:
         cfg,
         logs.append,
         60,
+        remote_home="/root",
         access_state=AccessFileState(),
         artifact_persist=lambda _x: None,
     )

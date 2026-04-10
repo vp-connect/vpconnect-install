@@ -137,17 +137,38 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=None,
     )
-    p.add_argument("--wg-port", type=int, default=d.WG_PORT_DEFAULT)
-    p.add_argument("--wg-client-cert-path", default=d.WG_CLIENT_CERT_PATH_DEFAULT)
-    p.add_argument("--wg-client-config-path", default=d.WG_CLIENT_CONFIG_PATH_DEFAULT)
-    p.add_argument("--mtproxy-port", type=int, default=d.MTPROXY_PORT_DEFAULT)
-    p.add_argument("--vpm-http-port", type=int, default=d.VPM_HTTP_PORT_DEFAULT)
-    p.add_argument(
+
+    wg_g = p.add_argument_group("WireGuard")
+    wg_g.add_argument("--wg-port", type=int, default=d.WG_PORT_DEFAULT)
+    wg_g.add_argument("--wg-client-cert-path", default=d.WG_CLIENT_CERT_PATH_DEFAULT)
+    wg_g.add_argument("--wg-client-config-path", default=d.WG_CLIENT_CONFIG_PATH_DEFAULT)
+    wg_g.add_argument(
+        "--wg-server-private-key-file",
+        default=None,
+        help="Server private key file (one line, wg genkey); reuse for client continuity",
+    )
+
+    mt_g = p.add_argument_group("MTProxy")
+    mt_g.add_argument("--mtproxy-port", type=int, default=d.MTPROXY_PORT_DEFAULT)
+    mt_g.add_argument(
+        "--mtproxy-secret",
+        default=None,
+        help="Secret: 32 hex or dd+32hex (env MTPROXY_SECRET); preserve tg:// link for clients",
+    )
+    mt_g.add_argument(
+        "--mtproxy-secret-file",
+        default=None,
+        help="File with MTProxy secret (same format as --mtproxy-secret)",
+    )
+
+    vpm_g = p.add_argument_group("VPManage")
+    vpm_g.add_argument("--vpm-http-port", type=int, default=d.VPM_HTTP_PORT_DEFAULT)
+    vpm_g.add_argument(
         "--vpm-password",
         default=None,
-        help="VPManage admin password (env VPM_PASSWORD); if omitted, generated on server (08)",
+        help="Admin password (env VPM_PASSWORD); if omitted, generated on server (08)",
     )
-    p.add_argument("--vpm-password-file", default=None)
+    vpm_g.add_argument("--vpm-password-file", default=None)
     p.add_argument("--ssh-connect-timeout", type=int, default=d.SSH_CONNECT_TIMEOUT)
     p.add_argument("--command-timeout", type=int, default=d.COMMAND_TIMEOUT)
     p.add_argument("--reboot-wait-timeout", type=int, default=d.REBOOT_WAIT_TIMEOUT)
@@ -170,6 +191,10 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
     )
     new_root = _secret(ns.new_root_password, "NEW_ROOT_PASSWORD", ns.new_root_password_file)
     vpm_pw = _secret(ns.vpm_password, "VPM_PASSWORD", ns.vpm_password_file)
+    wg_srv_priv = ""
+    if ns.wg_server_private_key_file:
+        wg_srv_priv = _read_file(ns.wg_server_private_key_file)
+    mt_sec = _secret(ns.mtproxy_secret, "MTPROXY_SECRET", ns.mtproxy_secret_file)
     extra_pub = ns.new_ssh_public_key or ""
     if ns.new_ssh_public_key_file:
         extra_pub = _read_file(ns.new_ssh_public_key_file)
@@ -205,7 +230,9 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
         wg_port=ns.wg_port,
         wg_client_cert_path=ns.wg_client_cert_path,
         wg_client_config_path=ns.wg_client_config_path,
+        wg_server_private_key=wg_srv_priv,
         mtproxy_port=ns.mtproxy_port,
+        mtproxy_secret=mt_sec,
         vpm_http_port=ns.vpm_http_port,
         vpm_password=vpm_pw,
         vpconfigure_repo_url=(ns.vpconfigure_repo_url or "").strip() or d.VPCONFIGURE_REPO_URL_DEFAULT,

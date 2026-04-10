@@ -203,12 +203,14 @@ def run_vpconfigure_phases_05_to_08(
     log: LogFn,
     timeout: int,
     *,
+    remote_home: str,
     access_state: AccessFileState,
     artifact_persist: Callable[[str], None],
 ) -> None:
     """05–08 из configure_dir.
 
     Перед каждым скриптом — пустая строка в логе; артефакты сохраняются после каждого шага.
+    ``remote_home`` — домашний каталог root на сервере (временный файл для приватного ключа WG).
     """
     tmo = min(timeout, 3600)
     ran_any_step = False
@@ -241,6 +243,13 @@ def run_vpconfigure_phases_05_to_08(
             f" --wg-client-config-path {shlex.quote(cdir)}"
             " --persist"
         )
+        wg_priv_remote = ""
+        wgk = (config.wg_server_private_key or "").strip()
+        if wgk:
+            wg_priv_remote = f"{remote_home.rstrip('/')}/.vpconnect_wg_server_private_key"
+            session.upload_bytes(wg_priv_remote, (wgk.splitlines()[0].strip() + "\n").encode("utf-8"))
+            _chmod_remote(log, session, wg_priv_remote, 30)
+            extra += f" --wg-server-private-key-file {shlex.quote(wg_priv_remote)}"
         _run_configure_script(
             log,
             session,
@@ -251,6 +260,8 @@ def run_vpconfigure_phases_05_to_08(
             tmo,
             blank_before=True,
         )
+        if wg_priv_remote:
+            session.exec_command(f"rm -f {shlex.quote(wg_priv_remote)}", timeout=30)
         pub_remote = f"{cert.rstrip('/')}/wg_server_public.key"
         try:
             raw = session.download_bytes(pub_remote)
@@ -262,6 +273,9 @@ def run_vpconfigure_phases_05_to_08(
 
     if config.set_mtproxy:
         extra = f" --mtproxy-port {int(config.mtproxy_port)} --persist"
+        mts = (config.mtproxy_secret or "").strip()
+        if mts:
+            extra += f" --mtproxy-secret {shlex.quote(mts)}"
         out_07 = _run_configure_script(
             log,
             session,

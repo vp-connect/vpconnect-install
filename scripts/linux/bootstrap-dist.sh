@@ -54,6 +54,7 @@ else
 fi
 
 if [ "$DO_BUILD" = "1" ]; then
+  # "$@" here is only arguments after "build" (see shift + break in the loop above).
   echo "Running packaging/build_distribution.py $*"
   exec "$RUN_PY" packaging/build_distribution.py "$@"
 fi

@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
 # Dispatch to OS-specific bootstrap under scripts/. Run from repo root (or any cwd after cd).
+# Optional: ./bootstrap.sh --system-python (see scripts/*/bootstrap.*).
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

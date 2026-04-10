@@ -1,9 +1,17 @@
 #!/usr/bin/env sh
 # Linux: venv + requirements.txt + editable install. Repo root = два уровня выше этого файла.
+# If arguments contain "build", run bootstrap-dist.sh instead (PyInstaller + dist/).
 set -eu
 
-ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT_DIR=$(CDPATH= cd -- "$HERE/../.." && pwd)
 cd "$ROOT_DIR"
+
+for arg in "$@"; do
+  if [ "$arg" = "build" ]; then
+    exec sh "$HERE/bootstrap-dist.sh" "$@"
+  fi
+done
 
 USE_SYSTEM_PYTHON=${USE_SYSTEM_PYTHON:-0}
 for arg in "$@"; do

@@ -1,7 +1,16 @@
 # Windows PowerShell: venv + requirements.txt + editable install.
+# If args include "build" (after any --system-python), delegates to bootstrap-dist.ps1.
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 Set-Location $RepoRoot
+
+$i = 0
+while ($i -lt $args.Count -and $args[$i] -eq "--system-python") { $i++ }
+if ($i -lt $args.Count -and $args[$i] -eq "build") {
+    $dist = Join-Path $PSScriptRoot "bootstrap-dist.ps1"
+    & $dist @args
+    exit $LASTEXITCODE
+}
 
 $SystemPython = $false
 $extra = [System.Collections.ArrayList]@()
@@ -10,7 +19,7 @@ foreach ($a in $args) {
     else { [void]$extra.Add($a) }
 }
 if ($extra.Count -gt 0) {
-    Write-Error "Unknown arguments: $($extra -join ' '). Only --system-python is supported."
+    Write-Error "Unknown arguments: $($extra -join ' '). Only --system-python is supported, or use .\scripts\windows\ps\bootstrap-dist.ps1 build"
 }
 
 $py = Get-Command python -ErrorAction SilentlyContinue
