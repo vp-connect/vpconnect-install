@@ -7,9 +7,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.outputs import (
+from shared import defaults as d
+from config import ProvisionConfig
+from application.outputs import (
     AccessFileState,
     ArtifactBundle,
     check_artifacts_base_writable,
@@ -78,8 +78,8 @@ def test_open_directory_skips_missing(tmp_path: Path) -> None:
     open_directory_in_file_manager(missing)  # no exception
 
 
-@patch("vpconnect_install.outputs.subprocess.Popen")
-@patch("vpconnect_install.outputs.sys.platform", "darwin")
+@patch("application.outputs.subprocess.Popen")
+@patch("application.outputs.sys.platform", "darwin")
 def test_open_directory_macos_open(mock_popen: MagicMock, tmp_path: Path) -> None:
     tmp_path.mkdir(parents=True, exist_ok=True)
     open_directory_in_file_manager(tmp_path)
@@ -89,8 +89,8 @@ def test_open_directory_macos_open(mock_popen: MagicMock, tmp_path: Path) -> Non
     assert kwargs.get("start_new_session") is True
 
 
-@patch("vpconnect_install.outputs.subprocess.Popen")
-@patch("vpconnect_install.outputs.sys.platform", "linux")
+@patch("application.outputs.subprocess.Popen")
+@patch("application.outputs.sys.platform", "linux")
 def test_open_directory_linux_xdg(mock_popen: MagicMock, tmp_path: Path) -> None:
     tmp_path.mkdir(parents=True, exist_ok=True)
     open_directory_in_file_manager(tmp_path)
@@ -100,8 +100,8 @@ def test_open_directory_linux_xdg(mock_popen: MagicMock, tmp_path: Path) -> None
     assert kwargs.get("start_new_session") is True
 
 
-@patch("vpconnect_install.outputs.os.startfile")
-@patch("vpconnect_install.outputs.sys.platform", "win32")
+@patch("application.outputs.os.startfile")
+@patch("application.outputs.sys.platform", "win32")
 def test_open_directory_win32(mock_startfile: MagicMock, tmp_path: Path) -> None:
     tmp_path.mkdir(parents=True, exist_ok=True)
     open_directory_in_file_manager(tmp_path)

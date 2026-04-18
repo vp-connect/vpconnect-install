@@ -23,7 +23,7 @@ dev = [
 ]
 
 [tool.setuptools.dynamic]
-version = { attr = "vpconnect_install.version.__version__" }
+version = { attr = "shared.version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -35,7 +35,7 @@ pythonpath = ["src"]
 # Tk-модули: юнит-тесты есть, но стабильный headless-прогон зависит от Tcl/Tk; в метриках покрытия считаем только «не-GUI» слой.
 [tool.coverage.run]
 source = ["src"]
-omit = ["**/gui_clipboard.py", "**/gui_tk.py"]
+omit = ["**/gui/gui_clipboard.py", "**/gui/gui_tk.py"]
 
 [tool.coverage.report]
 exclude_lines = [

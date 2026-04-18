@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.runner import run
+from shared import defaults as d
+from config import ProvisionConfig
+from application.runner import run
 
 
 def _minimal_run_config(**kw: object) -> ProvisionConfig:
@@ -29,14 +29,14 @@ def _minimal_run_config(**kw: object) -> ProvisionConfig:
     return ProvisionConfig(**defaults)  # type: ignore[arg-type]
 
 
-@patch("vpconnect_install.runner._poll_ssh_after_reboot")
-@patch("vpconnect_install.runner._request_reboot")
-@patch("vpconnect_install.runner.run_vpconfigure_phases_05_to_08")
-@patch("vpconnect_install.runner._maybe_reconnect_session", side_effect=lambda s, _c, _l: s)
-@patch("vpconnect_install.runner.run_04_connect_steps")
-@patch("vpconnect_install.runner.need_run_04_connect", return_value=True)
-@patch("vpconnect_install.runner.run_vpconnect_configure_bootstrap")
-@patch("vpconnect_install.runner.SSHSession")
+@patch("application.runner._poll_ssh_after_reboot")
+@patch("application.runner._request_reboot")
+@patch("application.runner.run_vpconfigure_phases_05_to_08")
+@patch("application.runner._maybe_reconnect_session", side_effect=lambda s, _c, _l: s)
+@patch("application.runner.run_04_connect_steps")
+@patch("application.runner.need_run_04_connect", return_value=True)
+@patch("application.runner.run_vpconnect_configure_bootstrap")
+@patch("application.runner.SSHSession")
 def test_run_full_pipeline_mocked(
     mock_ssh_cls: MagicMock,
     mock_bootstrap: MagicMock,
@@ -71,14 +71,14 @@ def test_run_full_pipeline_mocked(
     session.close.assert_called()
 
 
-@patch("vpconnect_install.runner._poll_ssh_after_reboot")
-@patch("vpconnect_install.runner._request_reboot")
-@patch("vpconnect_install.runner.run_vpconfigure_phases_05_to_08")
-@patch("vpconnect_install.runner._maybe_reconnect_session", side_effect=lambda s, _c, _l: s)
-@patch("vpconnect_install.runner.run_04_connect_steps")
-@patch("vpconnect_install.runner.need_run_04_connect", return_value=False)
-@patch("vpconnect_install.runner.run_vpconnect_configure_bootstrap")
-@patch("vpconnect_install.runner.SSHSession")
+@patch("application.runner._poll_ssh_after_reboot")
+@patch("application.runner._request_reboot")
+@patch("application.runner.run_vpconfigure_phases_05_to_08")
+@patch("application.runner._maybe_reconnect_session", side_effect=lambda s, _c, _l: s)
+@patch("application.runner.run_04_connect_steps")
+@patch("application.runner.need_run_04_connect", return_value=False)
+@patch("application.runner.run_vpconnect_configure_bootstrap")
+@patch("application.runner.SSHSession")
 def test_run_skips_04_when_not_needed(
     mock_ssh_cls: MagicMock,
     mock_bootstrap: MagicMock,
@@ -115,14 +115,14 @@ def test_run_skips_04_when_not_needed(
     mock_05_08.assert_called_once()
 
 
-@patch("vpconnect_install.runner._poll_ssh_after_reboot")
-@patch("vpconnect_install.runner._request_reboot")
-@patch("vpconnect_install.runner.run_vpconfigure_phases_05_to_08")
-@patch("vpconnect_install.runner._maybe_reconnect_session")
-@patch("vpconnect_install.runner.need_run_04_connect", return_value=True)
-@patch("vpconnect_install.runner.run_04_connect_steps")
-@patch("vpconnect_install.runner.run_vpconnect_configure_bootstrap")
-@patch("vpconnect_install.runner.SSHSession")
+@patch("application.runner._poll_ssh_after_reboot")
+@patch("application.runner._request_reboot")
+@patch("application.runner.run_vpconfigure_phases_05_to_08")
+@patch("application.runner._maybe_reconnect_session")
+@patch("application.runner.need_run_04_connect", return_value=True)
+@patch("application.runner.run_04_connect_steps")
+@patch("application.runner.run_vpconnect_configure_bootstrap")
+@patch("application.runner.SSHSession")
 def test_run_maybe_reconnect_replaces_session(
     mock_ssh_cls: MagicMock,
     mock_bootstrap: MagicMock,

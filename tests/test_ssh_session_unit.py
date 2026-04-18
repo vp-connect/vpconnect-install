@@ -8,8 +8,8 @@ from unittest.mock import patch
 import paramiko
 import pytest
 
-from vpconnect_install import ssh_session as ss
-from vpconnect_install.ssh_session import SSHSession
+import server.ssh_session as ss
+from server.ssh_session import SSHSession
 
 
 def test_load_private_key_invalid_path() -> None:

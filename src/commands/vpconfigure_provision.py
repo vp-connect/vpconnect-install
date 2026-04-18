@@ -10,9 +10,9 @@ from __future__ import annotations
 import shlex
 from collections.abc import Callable
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.configure_bootstrap import (
+from shared import defaults as d
+from config import ProvisionConfig
+from commands.configure_bootstrap import (
     INSTALL_ABORTED_MSG,
     _configure_step_failed,
     abort_configure_on_failure,
@@ -20,8 +20,8 @@ from vpconnect_install.configure_bootstrap import (
     parse_configure_result_line,
     parse_result_line_field,
 )
-from vpconnect_install.outputs import AccessFileState, ArtifactBundle
-from vpconnect_install.ssh_session import SSHSession
+from application.outputs import AccessFileState, ArtifactBundle
+from server.ssh_session import SSHSession
 
 LogFn = Callable[[str], None]
 

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.vpconfigure_provision import (
+from shared import defaults as d
+from config import ProvisionConfig
+from commands.vpconfigure_provision import (
     _DEFAULT_REMOTE_MTPROXY_SECRET_PATH,
     _mtproxy_secret_path_from_07_stdout,
     _need_run_05,

@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.configure_bootstrap import run_vpconnect_configure_bootstrap
+from shared import defaults as d
+from config import ProvisionConfig
+from commands.configure_bootstrap import run_vpconnect_configure_bootstrap
 
 
 def _exec_bootstrap(cmd: str, timeout: object = None) -> tuple[int, str, str]:
@@ -38,7 +38,7 @@ def _exec_bootstrap(cmd: str, timeout: object = None) -> tuple[int, str, str]:
     return (1, "", f"unhandled: {cmd[:120]}")
 
 
-@patch("vpconnect_install.configure_bootstrap.requests.get")
+@patch("commands.configure_bootstrap.requests.get")
 def test_run_vpconnect_configure_bootstrap_happy_path(mock_get: MagicMock) -> None:
     mock_resp = MagicMock()
     mock_resp.content = b"#!/usr/bin/env bash\n#stub\n"
@@ -66,8 +66,8 @@ def test_run_vpconnect_configure_bootstrap_happy_path(mock_get: MagicMock) -> No
     assert any("завершены успешно" in m for m in logs)
 
 
-@patch("vpconnect_install.configure_bootstrap.requests.get")
-@patch("vpconnect_install.configure_bootstrap._chmod_plus_x_remote", side_effect=ValueError("chmod boom"))
+@patch("commands.configure_bootstrap.requests.get")
+@patch("commands.configure_bootstrap._chmod_plus_x_remote", side_effect=ValueError("chmod boom"))
 def test_bootstrap_chmod_unexpected_exception_aborts(mock_chmod: MagicMock, mock_get: MagicMock) -> None:
     mock_resp = MagicMock()
     mock_resp.content = b"#!/bin/bash\n"
@@ -86,7 +86,7 @@ def test_bootstrap_chmod_unexpected_exception_aborts(mock_chmod: MagicMock, mock
         run_vpconnect_configure_bootstrap(session, cfg, lambda _m: None)
 
 
-@patch("vpconnect_install.configure_bootstrap.requests.get")
+@patch("commands.configure_bootstrap.requests.get")
 def test_fetch_script_network_error_aborts(mock_get: MagicMock) -> None:
     import requests
 
@@ -105,7 +105,7 @@ def test_fetch_script_network_error_aborts(mock_get: MagicMock) -> None:
 
 
 def test_remote_home_empty_stdout_raises() -> None:
-    from vpconnect_install.configure_bootstrap import _remote_home
+    from commands.configure_bootstrap import _remote_home
 
     session = MagicMock()
     session.exec_command.return_value = (0, "\n", "")
@@ -115,7 +115,7 @@ def test_remote_home_empty_stdout_raises() -> None:
 
 
 def test_remote_home_failure() -> None:
-    from vpconnect_install.configure_bootstrap import _remote_home
+    from commands.configure_bootstrap import _remote_home
 
     session = MagicMock()
     session.exec_command.return_value = (1, "", "no home")
@@ -124,7 +124,7 @@ def test_remote_home_failure() -> None:
         _remote_home(session, logs.append, 10)
 
 
-@patch("vpconnect_install.configure_bootstrap.requests.get")
+@patch("commands.configure_bootstrap.requests.get")
 def test_bootstrap_script_step_failure_aborts(mock_get: MagicMock) -> None:
     mock_resp = MagicMock()
     mock_resp.content = b"#!/bin/bash\n"
@@ -154,7 +154,7 @@ def test_bootstrap_script_step_failure_aborts(mock_get: MagicMock) -> None:
 
 
 def test_chmod_plus_x_remote_raises() -> None:
-    from vpconnect_install.configure_bootstrap import _chmod_plus_x_remote
+    from commands.configure_bootstrap import _chmod_plus_x_remote
 
     session = MagicMock()
     session.exec_command.return_value = (1, "", "chmod failed")

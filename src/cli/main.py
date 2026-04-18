@@ -1,5 +1,5 @@
 """
-Разбор аргументов командной строки и сборка :class:`~vpconnect_install.config.ProvisionConfig`.
+Разбор аргументов командной строки и сборка :class:`~config.ProvisionConfig`.
 
 Точка входа CLI — :func:`main` (вызывается из :mod:`vpconnect_install.__main__`).
 """
@@ -10,9 +10,9 @@ import argparse
 import os
 from pathlib import Path
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.runner import run
+from shared import defaults as d
+from config import ProvisionConfig
+from application.runner import run
 
 _CLI_EPILOG = (
     "Supported: Python 3.10+ on Windows, Linux, or macOS. "
@@ -187,7 +187,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
-    """Собрать :class:`~vpconnect_install.config.ProvisionConfig` из ``parse_args``."""
+    """Собрать :class:`~config.ProvisionConfig` из ``parse_args``."""
     root_pw = _secret(ns.root_password, "ROOT_PASSWORD", ns.root_password_file)
     key_pp = _secret(
         ns.root_private_key_passphrase,

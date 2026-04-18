@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from vpconnect_install.cli import build_arg_parser, config_from_args, main
+from cli import build_arg_parser, config_from_args, main
 
 
 def test_config_from_args_reads_root_password_file(tmp_path: Path) -> None:
@@ -99,7 +99,7 @@ def test_main_returns_0_on_success() -> None:
         "--no-set-mtproxy",
         "--no-set-vpmanage",
     ]
-    with patch("vpconnect_install.cli.run") as run_mock:
+    with patch("cli.main.run") as run_mock:
         code = main(argv)
     assert code == 0
     run_mock.assert_called_once()
@@ -123,7 +123,7 @@ def test_main_returns_1_on_run_error(tmp_path: Path) -> None:
     def boom(*_a: object, **_k: object) -> None:
         raise RuntimeError("planned")
 
-    with patch("vpconnect_install.cli.run", side_effect=boom):
+    with patch("cli.main.run", side_effect=boom):
         code = main(argv)
     assert code == 1
 
@@ -144,6 +144,6 @@ def test_config_artifacts_dir_passed_via_main_mock(tmp_path: Path) -> None:
         "--artifacts-dir",
         str(base),
     ]
-    with patch("vpconnect_install.cli.run") as run_mock:
+    with patch("cli.main.run") as run_mock:
         main(argv)
     assert run_mock.call_args.kwargs.get("artifacts_base") == base.resolve()

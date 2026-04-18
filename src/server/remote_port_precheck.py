@@ -12,8 +12,8 @@ from collections.abc import Callable
 import re
 from dataclasses import dataclass
 
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.ssh_session import SSHSession
+from config import ProvisionConfig
+from server.ssh_session import SSHSession
 
 LogFn = Callable[[str], None]
 

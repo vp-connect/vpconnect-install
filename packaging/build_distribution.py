@@ -183,7 +183,7 @@ def main() -> int:
     )
     args = ap.parse_args()
     sys.path.insert(0, str(REPO_ROOT / "src"))
-    from vpconnect_install.version import __version__ as ver
+    from shared.version import __version__ as ver
 
     if not args.skip_pyinstaller:
         _run_pyinstaller()

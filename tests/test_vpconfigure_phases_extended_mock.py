@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.outputs import AccessFileState, ArtifactBundle
-from vpconnect_install.vpconfigure_provision import (
+from shared import defaults as d
+from config import ProvisionConfig
+from application.outputs import AccessFileState, ArtifactBundle
+from commands.vpconfigure_provision import (
     _chmod_remote,
     run_04_connect_steps,
     run_vpconfigure_phases_05_to_08,
@@ -27,7 +27,7 @@ def _cfg(**kw: object) -> ProvisionConfig:
     return ProvisionConfig(**base)  # type: ignore[arg-type]
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_run_04_auto_setup_with_firewall_flag(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.exec_command.return_value = (0, "", "")
@@ -49,7 +49,7 @@ def test_run_04_auto_setup_with_firewall_flag(mock_run: MagicMock) -> None:
     assert "--enable-firewall" in extra
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_run_04_auto_setup_uploads_operator_key(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.exec_command.return_value = (0, "", "")
@@ -77,7 +77,7 @@ def test_run_04_auto_setup_uploads_operator_key(mock_run: MagicMock) -> None:
     assert persist == ["после 04_setsystemaccess.sh"]
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_run_04_manual_extended_options(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.exec_command.return_value = (0, "", "")
@@ -112,7 +112,7 @@ def test_chmod_remote_failure() -> None:
         _chmod_remote(logs.append, session, "/tmp/f", 10)
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_05_only_domain(mock_run: MagicMock) -> None:
     session = MagicMock()
     cfg = _cfg(auto_setup=False, set_domain=True, domain="a.example")
@@ -134,7 +134,7 @@ def test_phases_05_only_domain(mock_run: MagicMock) -> None:
     assert "--domain" in call[5]
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_06_wireguard_downloads_key(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.return_value = b"wg-pub-key\n"
@@ -158,7 +158,7 @@ def test_phases_06_wireguard_downloads_key(mock_run: MagicMock) -> None:
     assert "06_setwireguard.sh" in scripts
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_06_wg_server_private_key_uploaded(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.exec_command.return_value = (0, "", "")
@@ -187,7 +187,7 @@ def test_phases_06_wg_server_private_key_uploaded(mock_run: MagicMock) -> None:
     assert any("rm -f" in c and ".vpconnect_wg_server_private_key" in c for c in rm_calls)
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_06_passes_wg_address_when_set(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.return_value = b"pub\n"
@@ -212,7 +212,7 @@ def test_phases_06_passes_wg_address_when_set(mock_run: MagicMock) -> None:
     assert "10.9.0.1/24" in wg_extra
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_07_passes_mtproxy_secret(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.return_value = b"ab"
@@ -235,7 +235,7 @@ def test_phases_07_passes_mtproxy_secret(mock_run: MagicMock) -> None:
     assert "dd0123456789abcdef0123456789abcdef" in mt_extra
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_07_mtproxy_uses_default_secret_path(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.return_value = b"deadbeef"
@@ -256,7 +256,7 @@ def test_phases_07_mtproxy_uses_default_secret_path(mock_run: MagicMock) -> None
     assert st.mtproxy_secret == "deadbeef"
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_08_with_explicit_vpm_password(mock_run: MagicMock) -> None:
     session = MagicMock()
     cfg = _cfg(
@@ -284,7 +284,7 @@ def test_phases_08_with_explicit_vpm_password(mock_run: MagicMock) -> None:
     assert "--vpm-password" in extra
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_08_parses_password(mock_run: MagicMock) -> None:
     session = MagicMock()
     cfg = _cfg(
@@ -311,7 +311,7 @@ def test_phases_08_parses_password(mock_run: MagicMock) -> None:
     assert cfg.vpm_password == "Secret99"
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_none_enabled_persist_message(mock_run: MagicMock) -> None:
     session = MagicMock()
     cfg = _cfg(auto_setup=False, set_wireguard=False, set_mtproxy=False, set_vpmanage=False)
@@ -334,7 +334,7 @@ def test_phases_none_enabled_persist_message(mock_run: MagicMock) -> None:
     assert any("не запускались" in p for p in persisted)
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_07_download_failure_logged(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.side_effect = OSError("read fail")
@@ -355,7 +355,7 @@ def test_phases_07_download_failure_logged(mock_run: MagicMock) -> None:
     assert any("Не прочитан MTProxy secret" in m for m in logs)
 
 
-@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+@patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_06_download_failure_logged(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.side_effect = OSError("nope")

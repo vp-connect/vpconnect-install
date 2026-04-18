@@ -1,5 +1,5 @@
 """
-Графический интерфейс (Tkinter) для :func:`vpconnect_install.runner.run`.
+Графический интерфейс (Tkinter) для :func:`application.runner.run`.
 
 Два режима: упрощённый (``auto_setup``) и расширенный с отдельными блоками (SSH, домен, WG, MTProxy, VPManage).
 Лог выводится в фоне; по успеху открывается каталог артефактов в файловом менеджере ОС.
@@ -13,18 +13,18 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-from vpconnect_install import defaults as d
-from vpconnect_install import gui_captions_ru as gc
-from vpconnect_install import gui_hints_ru as gh
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.gui_clipboard import (
+from shared import defaults as d
+from gui import gui_captions_ru as gc
+from gui import gui_hints_ru as gh
+from config import ProvisionConfig
+from gui.gui_clipboard import (
     install_text_clipboard_and_context_menu,
     install_ttk_entry_clipboard_and_context_menu,
 )
-from vpconnect_install.gui_extended_hint import bind_extended_hint
-from vpconnect_install.outputs import open_directory_in_file_manager
-from vpconnect_install.runner import run
-from vpconnect_install.wg_client_network import DEFAULT_WG_ADDRESS_CIDR, normalize_wg_client_network
+from gui.gui_extended_hint import bind_extended_hint
+from application.outputs import open_directory_in_file_manager
+from application.runner import run
+from core.wg_client_network import DEFAULT_WG_ADDRESS_CIDR, normalize_wg_client_network
 
 # Высота лога в строках в расширенном режиме; в упрощённом лог растягивается по вертикали.
 _LOG_LINES_COMPACT = 6

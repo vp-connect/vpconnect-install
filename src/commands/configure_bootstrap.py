@@ -15,11 +15,11 @@ from collections.abc import Callable
 
 import requests
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.remote_port_precheck import assert_remote_listen_ports_free
-from vpconnect_install.remote_scripts_fetch import github_raw_file_url
-from vpconnect_install.ssh_session import SSHSession
+from shared import defaults as d
+from config import ProvisionConfig
+from server.remote_port_precheck import assert_remote_listen_ports_free
+from server.remote_scripts_fetch import github_raw_file_url
+from server.ssh_session import SSHSession
 
 LogFn = Callable[[str], None]
 

@@ -18,8 +18,8 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
+from shared import defaults as d
+from config import ProvisionConfig
 
 
 @dataclass

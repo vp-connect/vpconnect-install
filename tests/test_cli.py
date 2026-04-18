@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vpconnect_install.cli import build_arg_parser, config_from_args
+from cli import build_arg_parser, config_from_args
 
 
 def test_config_auto_setup_defaults() -> None:

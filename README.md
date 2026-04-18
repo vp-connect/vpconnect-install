@@ -42,7 +42,7 @@
 6. **Локально**: `ACCESS.txt`, файлы с паролями при необходимости; при **`auto_setup`** — также сгенерированные **`id_rsa`** / **`id_rsa.pub`** в каталоге артефактов.
 7. **Перезагрузка** сервера по SSH (после успеха), затем краткое ожидание доступности SSH.
 
-Версия пакета и ветка raw для **00–03** задаются в `vpconnect_install/defaults.py` (`VPCONFIGURE_RAW_GIT_BRANCH` и URL репозитория).
+Версия пакета и ветка raw для **00–03** задаются в `shared/defaults.py` (`VPCONFIGURE_RAW_GIT_BRANCH` и URL репозитория).
 
 ## Быстрый старт
 
@@ -184,7 +184,7 @@ pytest
 
 ## Настройки по умолчанию
 
-Файл [`src/vpconnect_install/defaults.py`](src/vpconnect_install/defaults.py): таймауты SSH и ожидания после перезагрузки, порты WireGuard / MTProxy / VPManage, пути к артефактам WG на сервере, размер RSA-ключа оператора (бит), длина генерируемых секретов, URL репозитория **vpconnect-configure** и ветка **`VPCONFIGURE_RAW_GIT_BRANCH`** для raw **00–03**.
+Файл [`src/shared/defaults.py`](src/shared/defaults.py): таймауты SSH и ожидания после перезагрузки, порты WireGuard / MTProxy / VPManage, пути к артефактам WG на сервере, размер RSA-ключа оператора (бит), длина генерируемых секретов, URL репозитория **vpconnect-configure** и ветка **`VPCONFIGURE_RAW_GIT_BRANCH`** для raw **00–03**.
 
 ## Тесты
 

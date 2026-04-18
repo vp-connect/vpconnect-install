@@ -4,7 +4,7 @@
 Последовательность: локальные артефакты → SSH → bootstrap **00–03** → определение хоста для URL в
 ``ACCESS.txt`` → **04** (при необходимости) → **05–08** → запрос перезагрузки и ожидание SSH.
 
-См. :mod:`vpconnect_install.configure_bootstrap` и :mod:`vpconnect_install.vpconfigure_provision`.
+См. :mod:`commands.configure_bootstrap` и :mod:`commands.vpconfigure_provision`.
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.configure_bootstrap import run_vpconnect_configure_bootstrap
-from vpconnect_install.outputs import (
+from shared import defaults as d
+from config import ProvisionConfig
+from commands.configure_bootstrap import run_vpconnect_configure_bootstrap
+from application.outputs import (
     AccessFileState,
     ArtifactBundle,
     check_artifacts_base_writable,
@@ -26,9 +26,9 @@ from vpconnect_install.outputs import (
     write_access_file,
     write_secret_file,
 )
-from vpconnect_install.ssh_session import SSHSession
-from vpconnect_install.version import __version__
-from vpconnect_install.vpconfigure_provision import (
+from server.ssh_session import SSHSession
+from shared.version import __version__
+from commands.vpconfigure_provision import (
     need_run_04_connect,
     run_04_connect_steps,
     run_vpconfigure_phases_05_to_08,
@@ -50,7 +50,7 @@ _PUBLIC_IPV4_PROBE_BASH = (
 
 def _log_default(_: str) -> None:
     """Пустой логгер по умолчанию, если вызывающий не передал callback."""
-    pass
+    return
 
 
 def _close_session_quietly(session: SSHSession) -> None:

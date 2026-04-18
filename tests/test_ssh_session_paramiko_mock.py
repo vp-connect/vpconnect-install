@@ -8,12 +8,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vpconnect_install.ssh_session import SSHSession
+from server.ssh_session import SSHSession
 
 
 @pytest.fixture
 def mock_new_client() -> MagicMock:
-    with patch("vpconnect_install.ssh_session._new_ssh_client") as m:
+    with patch("server.ssh_session._new_ssh_client") as m:
         yield m
 
 
@@ -31,7 +31,7 @@ def test_connect_with_key_file_success(mock_new_client: MagicMock, tmp_path) -> 
     key_path.write_text("dummy-key", encoding="utf-8")
     mock_c = MagicMock()
     mock_new_client.return_value = mock_c
-    with patch("vpconnect_install.ssh_session._load_private_key", return_value=MagicMock(name="pkey")):
+    with patch("server.ssh_session._load_private_key", return_value=MagicMock(name="pkey")):
         s = SSHSession("h", 22, "root", password="", private_key_path=str(key_path), log=lambda _m: None)
         s.connect()
     assert s.auth_method == "private_key"
@@ -141,7 +141,7 @@ def test_attempt_private_key_close_error_swallowed_on_connect_failure(
     mock_new_client.return_value = mock_c
     mock_c.connect.side_effect = OSError("refused")
     mock_c.close.side_effect = RuntimeError("close failed too")
-    with patch("vpconnect_install.ssh_session._load_private_key", return_value=MagicMock(name="pkey")):
+    with patch("server.ssh_session._load_private_key", return_value=MagicMock(name="pkey")):
         s = SSHSession("h", 22, "root", private_key_path=str(key_path), log=lambda _m: None)
         assert s._attempt_private_key() is False
 
@@ -152,7 +152,7 @@ def test_attempt_private_key_connect_fails_closes_client(mock_new_client: MagicM
     mock_c = MagicMock()
     mock_new_client.return_value = mock_c
     mock_c.connect.side_effect = OSError("refused")
-    with patch("vpconnect_install.ssh_session._load_private_key", return_value=MagicMock(name="pkey")):
+    with patch("server.ssh_session._load_private_key", return_value=MagicMock(name="pkey")):
         s = SSHSession("h", 22, "root", private_key_path=str(key_path), log=lambda _m: None)
         assert s._attempt_private_key() is False
     mock_c.close.assert_called()

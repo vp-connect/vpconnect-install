@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from vpconnect_install.remote_scripts_fetch import parse_github_repo_url, script_raw_url
-from vpconnect_install.version import scripts_git_branch
+from core.github_repo import parse_github_repo_url
+from server.remote_scripts_fetch import script_raw_url
+from shared.version import scripts_git_branch
 
 
 def test_parse_github_repo_url() -> None:

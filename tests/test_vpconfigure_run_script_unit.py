@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vpconnect_install.vpconfigure_provision import _run_configure_script
+from commands.vpconfigure_provision import _run_configure_script
 
 
 def test_run_configure_script_success() -> None:
@@ -14,7 +14,7 @@ def test_run_configure_script_success() -> None:
     log: list[str] = []
     out = "result:success; message:OK\n"
     with patch(
-        "vpconnect_install.vpconfigure_provision.exec_vpconfigure_script",
+        "commands.vpconfigure_provision.exec_vpconfigure_script",
         return_value=(0, out, ""),
     ):
         got = _run_configure_script(
@@ -29,7 +29,7 @@ def test_run_configure_script_warning_does_not_abort() -> None:
     log: list[str] = []
     out = "result:warning; message:careful\n"
     with patch(
-        "vpconnect_install.vpconfigure_provision.exec_vpconfigure_script",
+        "commands.vpconfigure_provision.exec_vpconfigure_script",
         return_value=(0, out, ""),
     ):
         got = _run_configure_script(
@@ -44,7 +44,7 @@ def test_run_configure_script_aborts_on_error() -> None:
     log: list[str] = []
     out = "result:error; message:fail\n"
     with patch(
-        "vpconnect_install.vpconfigure_provision.exec_vpconfigure_script",
+        "commands.vpconfigure_provision.exec_vpconfigure_script",
         return_value=(1, out, "e"),
     ):
         with pytest.raises(RuntimeError, match="Установка прекращена"):

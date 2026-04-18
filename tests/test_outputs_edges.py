@@ -7,19 +7,19 @@ from unittest.mock import patch
 
 import pytest
 
-from vpconnect_install.outputs import ArtifactBundle, open_directory_in_file_manager, write_secret_file
+from application.outputs import ArtifactBundle, open_directory_in_file_manager, write_secret_file
 
 
 def test_open_directory_swallows_oserror(tmp_path: Path) -> None:
     tmp_path.mkdir(parents=True, exist_ok=True)
-    with patch("vpconnect_install.outputs.os.startfile", side_effect=OSError("x")):
-        with patch("vpconnect_install.outputs.sys.platform", "win32"):
+    with patch("application.outputs.os.startfile", side_effect=OSError("x")):
+        with patch("application.outputs.sys.platform", "win32"):
             open_directory_in_file_manager(tmp_path)
 
 
 def test_operator_keypair_chmod_notimplemented(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from vpconnect_install.config import ProvisionConfig
-    from vpconnect_install.outputs import prepare_artifact_dir
+    from config import ProvisionConfig
+    from application.outputs import prepare_artifact_dir
 
     real_chmod = Path.chmod
 

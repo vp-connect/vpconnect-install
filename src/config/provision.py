@@ -10,9 +10,9 @@ import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from vpconnect_install import defaults as d
-from vpconnect_install.remote_scripts_fetch import parse_github_repo_url
-from vpconnect_install.wg_client_network import parse_optional_wg_client_network
+from shared import defaults as d
+from core.github_repo import parse_github_repo_url
+from core.wg_client_network import parse_optional_wg_client_network
 
 
 def _port_ok(p: int) -> bool:

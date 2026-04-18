@@ -6,9 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
-from vpconnect_install.remote_port_precheck import (
+from shared import defaults as d
+from config import ProvisionConfig
+from server.remote_port_precheck import (
     MTPROXY_INTERNAL_TCP_PORT,
     PortCheck,
     _is_expected_reinstall_owner,

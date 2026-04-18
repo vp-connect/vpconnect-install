@@ -9,8 +9,8 @@ import pytest
 
 tkinter = pytest.importorskip("tkinter")
 
-from vpconnect_install import defaults as d  # noqa: E402
-from vpconnect_install.gui_tk import (  # noqa: E402
+from shared import defaults as d  # noqa: E402
+from gui.gui_tk import (  # noqa: E402
     ProvisionerGUI,
     _build_config,
     _parse_int,
@@ -142,12 +142,12 @@ def test_provisioner_gui_flows_single_window() -> None:
     """Один Tk на тест — избегаем проблем второго корня в одном процессе."""
     _tk_skip_if_broken()
     with (
-        patch("vpconnect_install.gui_tk.open_directory_in_file_manager") as mock_open,
-        patch("vpconnect_install.gui_tk.threading.Thread", _InstantThread),
-        patch("vpconnect_install.gui_tk.run") as mock_run,
-        patch("vpconnect_install.gui_tk.messagebox.showerror") as mock_err,
-        patch("vpconnect_install.gui_tk.messagebox.showinfo") as mock_info,
-        patch("vpconnect_install.gui_tk.filedialog.askopenfilename", return_value="/k.pem"),
+        patch("gui.gui_tk.open_directory_in_file_manager") as mock_open,
+        patch("gui.gui_tk.threading.Thread", _InstantThread),
+        patch("gui.gui_tk.run") as mock_run,
+        patch("gui.gui_tk.messagebox.showerror") as mock_err,
+        patch("gui.gui_tk.messagebox.showinfo") as mock_info,
+        patch("gui.gui_tk.filedialog.askopenfilename", return_value="/k.pem"),
     ):
         g = ProvisionerGUI()
         g.root.withdraw()
@@ -208,10 +208,10 @@ def test_provisioner_gui_flows_single_window() -> None:
 
 
 def test_gui_tk_main_calls_run_ui() -> None:
-    with patch("vpconnect_install.gui_tk.ProvisionerGUI") as pc:
+    with patch("gui.gui_tk.ProvisionerGUI") as pc:
         inst = MagicMock()
         pc.return_value = inst
-        import vpconnect_install.gui_tk as gt
+        import gui.gui_tk as gt
 
         gt.main()
         inst.run_ui.assert_called_once()

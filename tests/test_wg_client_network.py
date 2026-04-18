@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from vpconnect_install.wg_client_network import (
+from core.wg_client_network import (
     normalize_wg_client_network,
     parse_optional_wg_client_network,
 )
@@ -58,6 +58,6 @@ def test_normalize_rejects_specific_messages(raw: str, msg: str) -> None:
 
 
 def test_normalize_wraps_ipaddress_interface_errors() -> None:
-    with patch("vpconnect_install.wg_client_network.ipaddress.IPv4Interface", side_effect=ValueError("bad")):
+    with patch("core.wg_client_network.ipaddress.IPv4Interface", side_effect=ValueError("bad")):
         with pytest.raises(ValueError, match="Не удалось сформировать корректный адрес WireGuard"):
             normalize_wg_client_network("10.0.0.0")

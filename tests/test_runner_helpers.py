@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vpconnect_install import runner
-from vpconnect_install.config import ProvisionConfig
+import application.runner as runner
+from config import ProvisionConfig
 
 
 def _cfg(**kw: object) -> ProvisionConfig:
@@ -149,7 +149,7 @@ def test_poll_ssh_after_finalize_times_out(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_write_credential_artifacts_quiet(tmp_path: Path) -> None:
-    from vpconnect_install.outputs import ArtifactBundle
+    from application.outputs import ArtifactBundle
 
     bundle = ArtifactBundle(root=tmp_path)
     cfg = _cfg()
@@ -222,7 +222,7 @@ def test_maybe_reconnect_polls_when_port_changes(monkeypatch: pytest.MonkeyPatch
 
 
 def test_write_credential_artifacts_logs_when_not_quiet(tmp_path: Path) -> None:
-    from vpconnect_install.outputs import ArtifactBundle
+    from application.outputs import ArtifactBundle
 
     bundle = ArtifactBundle(root=tmp_path)
     cfg = _cfg()

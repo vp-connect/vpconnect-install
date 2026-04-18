@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from vpconnect_install import defaults as d
-from vpconnect_install.config import ProvisionConfig
+from shared import defaults as d
+from config import ProvisionConfig
 
 
 def _valid_extended(**kw: object) -> ProvisionConfig:
@@ -137,6 +137,6 @@ def test_validate_wg_client_network_none_pair_clears_field(monkeypatch: pytest.M
     def _fake_parse(_raw: str) -> tuple[str, str] | None:
         return None
 
-    monkeypatch.setattr("vpconnect_install.config.parse_optional_wg_client_network", _fake_parse)
+    monkeypatch.setattr("config.provision.parse_optional_wg_client_network", _fake_parse)
     cfg.validate()
     assert cfg.wg_client_network == ""

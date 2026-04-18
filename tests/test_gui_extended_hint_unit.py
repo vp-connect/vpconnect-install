@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock, patch
 
-import vpconnect_install.gui_extended_hint as geh
+import gui.gui_extended_hint as geh
 
 
 def test_bind_extended_hint_skips_blank_text() -> None:

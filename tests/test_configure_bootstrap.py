@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vpconnect_install.configure_bootstrap import (
+from commands.configure_bootstrap import (
     parse_configure_install_path,
     parse_configure_result_line,
     parse_result_line_field,

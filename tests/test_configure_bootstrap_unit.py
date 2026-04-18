@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vpconnect_install.configure_bootstrap import (
+from commands.configure_bootstrap import (
     INSTALL_ABORTED_MSG,
     abort_configure_on_failure,
     exec_vpconfigure_script,
