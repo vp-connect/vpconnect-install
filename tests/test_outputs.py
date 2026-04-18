@@ -188,6 +188,16 @@ def test_write_access_file_plain_ssh_no_key(tmp_path: Path) -> None:
     assert "-i " not in text.split("SSH command:")[1].split("\n")[0]
 
 
+def test_write_access_file_includes_wg_client_network_line_when_set(tmp_path: Path) -> None:
+    """Строка ACCESS отражает поле конфигурации (нормализация — на этапе validate)."""
+    cfg = _minimal_config()
+    cfg.wg_client_network = "10.9.0.1/24"
+    bundle = ArtifactBundle(root=tmp_path)
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    text = write_access_file(bundle, cfg, AccessFileState()).read_text(encoding="utf-8")
+    assert "WireGuard server address (normalized): 10.9.0.1/24" in text
+
+
 def test_write_access_file_optional_sections_off(tmp_path: Path) -> None:
     cfg = _minimal_config(
         set_wireguard=False,

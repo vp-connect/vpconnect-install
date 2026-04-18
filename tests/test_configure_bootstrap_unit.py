@@ -10,9 +10,12 @@ from vpconnect_install.configure_bootstrap import (
     INSTALL_ABORTED_MSG,
     abort_configure_on_failure,
     exec_vpconfigure_script,
+    parse_configure_result_line,
     resolve_configure_install_dir,
     verify_configure_scripts_dir,
+    _bootstrap_export_branch,
     _configure_step_failed,
+    _parse_configure_result_segments,
     _stdout_lines_before_marked_line,
 )
 
@@ -32,6 +35,21 @@ def test_stdout_lines_before_marked_line() -> None:
     assert _stdout_lines_before_marked_line("only", "only") == ""
 
 
+def test_parse_configure_result_segments_skips_empty_between_semicolons() -> None:
+    st, msg, br = _parse_configure_result_segments("result:ok;;message:hi; branch:dev")
+    assert st == "ok"
+    assert msg == "hi"
+    assert br == "dev"
+
+
+def test_parse_configure_result_line_finds_last_result_among_noise() -> None:
+    out = "apt noise\nresult:old; message:x\nresult:ok; message:done\n"
+    st, msg, br, line1 = parse_configure_result_line(out)
+    assert st == "ok"
+    assert msg == "done"
+    assert line1.startswith("result:ok")
+
+
 def test_abort_configure_on_failure_logs_and_raises() -> None:
     logs: list[str] = []
     with pytest.raises(RuntimeError, match="Установка прекращена"):
@@ -45,6 +63,26 @@ def test_abort_configure_on_failure_logs_and_raises() -> None:
         )
     assert INSTALL_ABORTED_MSG in "".join(logs)
     assert any("доп. вывод" in m for m in logs)
+
+
+def test_abort_configure_on_failure_non_result_line_logs_rest_of_stdout() -> None:
+    logs: list[str] = []
+    with pytest.raises(RuntimeError, match="Установка прекращена"):
+        abort_configure_on_failure(
+            logs.append,
+            "s.sh",
+            "",
+            "first line\nsecond line\n",
+            "",
+            "not a result line",
+        )
+    assert any("доп. вывод stdout" in m and "second line" in m for m in logs)
+
+
+def test_bootstrap_export_branch_requires_os_branch_from_01() -> None:
+    logs: list[str] = []
+    with pytest.raises(RuntimeError, match="Установка прекращена"):
+        _bootstrap_export_branch(2, None, logs.append)
 
 
 def test_exec_vpconfigure_script_builds_bash_lc() -> None:

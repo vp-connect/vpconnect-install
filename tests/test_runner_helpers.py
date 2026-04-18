@@ -183,6 +183,58 @@ def test_poll_ssh_after_finalize_connects_successfully(monkeypatch: pytest.Monke
     assert any("Снова доступен" in m for m in logs)
 
 
+def test_poll_ssh_after_finalize_connect_raises_then_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """test_connect True, connect raises — логируем и продолжаем цикл до таймаута."""
+    cfg = _cfg(reboot_wait_timeout=2, ssh_poll_interval=1)
+    call = {"n": 0}
+
+    class FakeSession:
+        def __init__(self, *a: object, **k: object) -> None:
+            pass
+
+        def test_connect(self) -> bool:
+            return True
+
+        def connect(self) -> None:
+            call["n"] += 1
+            raise ConnectionResetError("not yet")
+
+    monkeypatch.setattr(runner, "SSHSession", FakeSession)
+    logs: list[str] = []
+    runner._poll_ssh_after_finalize(cfg, 22, "pw", "", logs.append)
+    assert any("Ожидание SSH" in m for m in logs)
+    assert call["n"] >= 1
+
+
+def test_maybe_reconnect_polls_when_port_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    sess = MagicMock()
+    sess.auth_method = "password"
+    new_sess = MagicMock()
+    monkeypatch.setattr(runner, "_poll_ssh_after_finalize", MagicMock(return_value=new_sess))
+    out = runner._maybe_reconnect_session(
+        sess,
+        _cfg(new_ssh_port=2222, new_root_password="newpw", root_password="old"),
+        lambda _m: None,
+    )
+    assert out is new_sess
+    sess.close.assert_called_once()
+    runner._poll_ssh_after_finalize.assert_called_once()
+
+
+def test_write_credential_artifacts_logs_when_not_quiet(tmp_path: Path) -> None:
+    from vpconnect_install.outputs import ArtifactBundle
+
+    bundle = ArtifactBundle(root=tmp_path)
+    cfg = _cfg()
+    cfg.new_root_password = "nr"
+    cfg.set_vpmanage = True
+    cfg.vpm_password = "vp"
+    logs: list[str] = []
+    runner._write_credential_artifacts(bundle, cfg, logs.append, quiet=False)
+    assert any("credentials_new_root_password" in m for m in logs)
+    assert any("credentials_vpm_password" in m for m in logs)
+
+
 def test_poll_ssh_after_reboot_swallows_inner_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner, "_poll_ssh_after_finalize", MagicMock(side_effect=RuntimeError("x")))
     logs: list[str] = []

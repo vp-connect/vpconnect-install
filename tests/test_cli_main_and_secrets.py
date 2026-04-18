@@ -17,6 +17,28 @@ def test_config_from_args_reads_root_password_file(tmp_path: Path) -> None:
     assert cfg.root_password == "from-file"
 
 
+def test_config_from_args_wg_server_private_key_file(tmp_path: Path) -> None:
+    keyf = tmp_path / "wg.key"
+    keyf.write_text("  PRIVATEKEYLINE  \n", encoding="utf-8")
+    p = build_arg_parser()
+    ns = p.parse_args(
+        [
+            "--host",
+            "h",
+            "--root-password",
+            "x",
+            "--no-auto-setup",
+            "--no-set-wireguard",
+            "--no-set-mtproxy",
+            "--no-set-vpmanage",
+            "--wg-server-private-key-file",
+            str(keyf),
+        ]
+    )
+    cfg = config_from_args(ns)
+    assert cfg.wg_server_private_key == "PRIVATEKEYLINE"
+
+
 def test_config_from_args_new_ssh_public_key_file(tmp_path: Path) -> None:
     f = tmp_path / "k.pub"
     f.write_text("ssh-ed25519 AAAcomment\n", encoding="utf-8")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -130,6 +131,21 @@ def test_close_clears_client(mock_new_client: MagicMock) -> None:
         _ = s.client
 
 
+def test_attempt_private_key_close_error_swallowed_on_connect_failure(
+    mock_new_client: MagicMock,
+    tmp_path: Path,
+) -> None:
+    key_path = tmp_path / "k2.pem"
+    key_path.write_text("x", encoding="utf-8")
+    mock_c = MagicMock()
+    mock_new_client.return_value = mock_c
+    mock_c.connect.side_effect = OSError("refused")
+    mock_c.close.side_effect = RuntimeError("close failed too")
+    with patch("vpconnect_install.ssh_session._load_private_key", return_value=MagicMock(name="pkey")):
+        s = SSHSession("h", 22, "root", private_key_path=str(key_path), log=lambda _m: None)
+        assert s._attempt_private_key() is False
+
+
 def test_attempt_private_key_connect_fails_closes_client(mock_new_client: MagicMock, tmp_path) -> None:
     key_path = tmp_path / "k"
     key_path.write_text("x", encoding="utf-8")
@@ -140,6 +156,25 @@ def test_attempt_private_key_connect_fails_closes_client(mock_new_client: MagicM
         s = SSHSession("h", 22, "root", private_key_path=str(key_path), log=lambda _m: None)
         assert s._attempt_private_key() is False
     mock_c.close.assert_called()
+
+
+def test_mkdir_p_swallows_mkdir_oserror(mock_new_client: MagicMock) -> None:
+    mock_c = MagicMock()
+    mock_new_client.return_value = mock_c
+    sftp = MagicMock()
+    mock_c.open_sftp.return_value = sftp
+    sftp.stat.side_effect = OSError("missing")
+    sftp.mkdir.side_effect = OSError("exists or race")
+    fh = MagicMock()
+    cm = MagicMock()
+    cm.__enter__.return_value = fh
+    cm.__exit__.return_value = None
+    sftp.open.return_value = cm
+
+    s = SSHSession("h", 22, "root", password="x", log=lambda _m: None)
+    s.connect()
+    s.upload_bytes("/deep/nested/file.txt", b"z")
+    fh.write.assert_called_once_with(b"z")
 
 
 def test_mkdir_p_sftp_ignores_existing(mock_new_client: MagicMock) -> None:

@@ -129,3 +129,14 @@ def test_validate_wg_client_network_rejects_garbage() -> None:
     cfg = _valid_extended(set_wireguard=True, wg_client_network="not-an-ip")
     with pytest.raises(ValueError, match="Сеть WG подключений"):
         cfg.validate()
+
+
+def test_validate_wg_client_network_none_pair_clears_field(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = _valid_extended(set_wireguard=True, wg_client_network="10.1.0.0/24")
+
+    def _fake_parse(_raw: str) -> tuple[str, str] | None:
+        return None
+
+    monkeypatch.setattr("vpconnect_install.config.parse_optional_wg_client_network", _fake_parse)
+    cfg.validate()
+    assert cfg.wg_client_network == ""

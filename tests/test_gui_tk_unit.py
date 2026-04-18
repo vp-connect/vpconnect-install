@@ -21,9 +21,13 @@ from vpconnect_install.gui_tk import (  # noqa: E402
 
 
 def _tk_skip_if_broken() -> None:
+    """Проверка Tcl/Tk и ttk (на частично сломанных установках падает уже при Panedwindow/Frame)."""
     try:
         r = tkinter.Tk()
         r.withdraw()
+        import tkinter.ttk as ttk
+
+        ttk.Frame(r)
         r.destroy()
     except tkinter.TclError as e:
         pytest.skip(f"Tk/Tcl unavailable: {e}")

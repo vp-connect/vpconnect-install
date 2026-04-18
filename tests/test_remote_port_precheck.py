@@ -10,6 +10,8 @@ from vpconnect_install import defaults as d
 from vpconnect_install.config import ProvisionConfig
 from vpconnect_install.remote_port_precheck import (
     MTPROXY_INTERNAL_TCP_PORT,
+    PortCheck,
+    _is_expected_reinstall_owner,
     assert_remote_listen_ports_free,
     required_listen_port_checks,
 )
@@ -112,6 +114,36 @@ def test_assert_remote_listen_ports_free_success() -> None:
     cmd = session.exec_command.call_args[0][0]
     assert "sport = :" in cmd
     assert "2222" in cmd
+
+
+def test_is_expected_reinstall_owner_marker_in_details() -> None:
+    c = PortCheck(proto="tcp", port=22, purpose="ssh", service="ssh")
+    assert _is_expected_reinstall_owner(c, "x OWNER:ssh y") is True
+
+
+def test_is_expected_reinstall_owner_empty_details_false() -> None:
+    c = PortCheck(proto="tcp", port=22, purpose="ssh", service="ssh")
+    assert _is_expected_reinstall_owner(c, "   \n") is False
+
+
+def test_is_expected_reinstall_owner_regex_mtproxy() -> None:
+    c = PortCheck(proto="tcp", port=25, purpose="mt", service="mtproxy")
+    assert _is_expected_reinstall_owner(c, "LISTEN mtproto-proxy") is True
+
+
+def test_assert_remote_listen_ports_free_generic_failure_no_busy_lines() -> None:
+    cfg = ProvisionConfig(
+        host="h",
+        port=22,
+        root_password="x",
+        auto_setup=True,
+        vpconfigure_repo_url=d.VPCONFIGURE_REPO_URL_DEFAULT,
+    )
+    cfg.apply_auto_setup()
+    session = MagicMock()
+    session.exec_command.return_value = (9, "some stdout", "stderr msg")
+    with pytest.raises(RuntimeError, match="Установка прекращена"):
+        assert_remote_listen_ports_free(session, cfg, lambda _m: None, 60)
 
 
 def test_assert_remote_listen_ports_free_busy_raises() -> None:
