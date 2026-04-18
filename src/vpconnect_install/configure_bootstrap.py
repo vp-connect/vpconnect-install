@@ -34,24 +34,15 @@ CONFIGURE_SCRIPT_NAMES = (
 )
 
 
-def parse_configure_result_line(stdout: str) -> tuple[str, str, str | None, str]:
-    """Строка result:… в stdout (apt/dnf и т.д. могут писать в stdout до неё — берём последнюю строку result:)."""
-    text = (stdout or "").lstrip("\ufeff").strip()
-    if not text:
-        return "unknown", "", None, ""
-    stripped_lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    line1 = ""
+def _last_line_starting_with_result(stripped_lines: list[str]) -> str:
     for ln in reversed(stripped_lines):
         if ln.lower().startswith("result:"):
-            line1 = ln
-            break
-    if not line1:
-        line1 = stripped_lines[0] if stripped_lines else ""
-    if not line1.lower().startswith("result:"):
-        return "unknown", line1, None, line1
-    status = ""
-    message = ""
-    branch: str | None = None
+            return ln
+    return ""
+
+
+def _parse_configure_result_segments(line1: str) -> tuple[str, str, str | None]:
+    status, message, branch = "", "", None
     for seg in line1.split(";"):
         seg = seg.strip()
         if not seg:
@@ -63,6 +54,21 @@ def parse_configure_result_line(stdout: str) -> tuple[str, str, str | None, str]
             message = seg.split(":", 1)[1].strip()
         elif low.startswith("branch:"):
             branch = seg.split(":", 1)[1].strip()
+    return status, message, branch
+
+
+def parse_configure_result_line(stdout: str) -> tuple[str, str, str | None, str]:
+    """Строка result:… в stdout (apt/dnf и т.д. могут писать в stdout до неё — берём последнюю строку result:)."""
+    text = (stdout or "").lstrip("\ufeff").strip()
+    if not text:
+        return "unknown", "", None, ""
+    stripped_lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    line1 = _last_line_starting_with_result(stripped_lines)
+    if not line1:
+        line1 = stripped_lines[0] if stripped_lines else ""
+    if not line1.lower().startswith("result:"):
+        return "unknown", line1, None, line1
+    status, message, branch = _parse_configure_result_segments(line1)
     return status, message, branch, line1
 
 
@@ -240,26 +246,15 @@ def _chmod_plus_x_remote(session: SSHSession, log: LogFn, remote_path: str, scri
         raise RuntimeError(INSTALL_ABORTED_MSG)
 
 
-def run_vpconnect_configure_bootstrap(
+def _upload_configure_scripts_to_home(
     session: SSHSession,
-    config: ProvisionConfig,
+    home: str,
+    repo: str,
+    branch: str,
+    fetch_to: int,
+    timeout: int,
     log: LogFn,
-    *,
-    on_script_ok: Callable[[str], None] | None = None,
-) -> tuple[str, str, str]:
-    """Скачать 00–03 в $HOME, выполнить 00–03. Возвращает (home, os_branch, configure_dir). При error — стоп.
-
-    ``on_script_ok`` вызывается после каждого успешно завершённого скрипта (имя файла), чтобы сохранить артефакты.
-    """
-    repo = config.vpconfigure_repo_url.strip()
-    branch = d.VPCONFIGURE_RAW_GIT_BRANCH
-    timeout = min(config.command_timeout, 3600)
-    fetch_to = min(120, timeout)
-
-    log("[vpconnect-configure] Загрузка скриптов с GitHub (raw)…")
-    home = _remote_home(session, log, min(30, timeout))
-    log(f"[vpconnect-configure] Каталог на сервере: {home}")
-
+) -> None:
     for name in CONFIGURE_SCRIPT_NAMES:
         try:
             body = _fetch_configure_script(repo, branch, name, fetch_to)
@@ -279,49 +274,97 @@ def run_vpconnect_configure_bootstrap(
             log(INSTALL_ABORTED_MSG)
             raise RuntimeError(INSTALL_ABORTED_MSG) from ex
 
+
+def _bootstrap_script_cli(name: str, repo: str, home: str) -> str:
+    if name == "03_getconfigure.sh":
+        dest = f"{home}/vpconnect-configure"
+        return f" --repo {shlex.quote(repo)} -d {shlex.quote(dest)}"
+    return ""
+
+
+def _bootstrap_export_branch(idx: int, os_branch: str | None, log: LogFn) -> str | None:
+    if idx < 2:
+        return None
+    if not os_branch:
+        log("Ошибка! Не определена VPCONFIGURE_GIT_BRANCH после 01_getosversion.sh")
+        log(INSTALL_ABORTED_MSG)
+        raise RuntimeError(INSTALL_ABORTED_MSG)
+    return os_branch
+
+
+def _run_configure_bootstrap_script_step(
+    session: SSHSession,
+    config: ProvisionConfig,
+    home: str,
+    repo: str,
+    name: str,
+    idx: int,
+    timeout: int,
+    log: LogFn,
+    os_branch: str | None,
+    stdout_03: str,
+    on_script_ok: Callable[[str], None] | None,
+) -> tuple[str | None, str]:
+    extra_cli = _bootstrap_script_cli(name, repo, home)
+    export_b = _bootstrap_export_branch(idx, os_branch, log)
+    code, out, err = exec_vpconfigure_script(session, home, name, export_b, extra_cli, timeout)
+    status, message, br, line1 = parse_configure_result_line(out)
+    log(f"[vpconnect-configure] {name}: {line1 or '(пустой stdout)'}")
+    if err.strip():
+        log(f"[vpconnect-configure] {name} stderr:\n{err.rstrip()}")
+    new_branch = br if name == "01_getosversion.sh" and br else None
+    new_stdout_03 = out or "" if name == "03_getconfigure.sh" else stdout_03
+    if status == "warning":
+        log(f"[vpconnect-configure] {name}: предупреждение — {message}")
+    if _configure_step_failed(status, code):
+        abort_configure_on_failure(log, name, message, out, err, line1)
+    if name == "00_bashinstall.sh":
+        assert_remote_listen_ports_free(session, config, log, timeout)
+    if on_script_ok:
+        on_script_ok(name)
+    merged_branch = new_branch if new_branch is not None else os_branch
+    return merged_branch, new_stdout_03
+
+
+def run_vpconnect_configure_bootstrap(
+    session: SSHSession,
+    config: ProvisionConfig,
+    log: LogFn,
+    *,
+    on_script_ok: Callable[[str], None] | None = None,
+) -> tuple[str, str, str]:
+    """Скачать 00–03 в $HOME, выполнить 00–03. Возвращает (home, os_branch, configure_dir). При error — стоп.
+
+    ``on_script_ok`` вызывается после каждого успешно завершённого скрипта (имя файла), чтобы сохранить артефакты.
+    """
+    repo = config.vpconfigure_repo_url.strip()
+    branch = d.VPCONFIGURE_RAW_GIT_BRANCH
+    timeout = min(config.command_timeout, 3600)
+    fetch_to = min(120, timeout)
+
+    log("[vpconnect-configure] Загрузка скриптов с GitHub (raw)…")
+    home = _remote_home(session, log, min(30, timeout))
+    log(f"[vpconnect-configure] Каталог на сервере: {home}")
+    _upload_configure_scripts_to_home(session, home, repo, branch, fetch_to, timeout, log)
+
     os_branch: str | None = None
     stdout_03 = ""
-
     for idx, name in enumerate(CONFIGURE_SCRIPT_NAMES):
         if idx > 0:
             log("")
-        extra_cli = ""
-        export_b: str | None = None
-        if idx >= 2:
-            if not os_branch:
-                log("Ошибка! Не определена VPCONFIGURE_GIT_BRANCH после 01_getosversion.sh")
-                log(INSTALL_ABORTED_MSG)
-                raise RuntimeError(INSTALL_ABORTED_MSG)
-            export_b = os_branch
-        if name == "03_getconfigure.sh":
-            dest = f"{home}/vpconnect-configure"
-            extra_cli = f" --repo {shlex.quote(repo)} -d {shlex.quote(dest)}"
-
-        code, out, err = exec_vpconfigure_script(session, home, name, export_b, extra_cli, timeout)
-
-        status, message, br, line1 = parse_configure_result_line(out)
-        log(f"[vpconnect-configure] {name}: {line1 or '(пустой stdout)'}")
-
-        if err.strip():
-            log(f"[vpconnect-configure] {name} stderr:\n{err.rstrip()}")
-
-        if name == "01_getosversion.sh" and br:
-            os_branch = br
-
-        if name == "03_getconfigure.sh":
-            stdout_03 = out or ""
-
-        if status == "warning":
-            log(f"[vpconnect-configure] {name}: предупреждение — {message}")
-
-        if _configure_step_failed(status, code):
-            abort_configure_on_failure(log, name, message, out, err, line1)
-
-        if name == "00_bashinstall.sh":
-            assert_remote_listen_ports_free(session, config, log, timeout)
-
-        if on_script_ok:
-            on_script_ok(name)
+        os_branch, stdout_03 = _run_configure_bootstrap_script_step(
+            session,
+            config,
+            home,
+            repo,
+            name,
+            idx,
+            timeout,
+            log,
+            os_branch,
+            stdout_03,
+            on_script_ok,
+        )
 
     log("[vpconnect-configure] Шаги 00–03 завершены успешно.")
     assert os_branch is not None

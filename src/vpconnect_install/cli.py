@@ -147,6 +147,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Server private key file (one line, wg genkey); reuse for client continuity",
     )
+    wg_g.add_argument(
+        "--wg-client-network",
+        default="",
+        help="WG client subnet hint: empty=default 10.8.0.1/24; or CIDR/partial octets (normalized to x.y.z.1/24)",
+    )
 
     mt_g = p.add_argument_group("MTProxy")
     mt_g.add_argument("--mtproxy-port", type=int, default=d.MTPROXY_PORT_DEFAULT)
@@ -231,6 +236,7 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
         wg_client_cert_path=ns.wg_client_cert_path,
         wg_client_config_path=ns.wg_client_config_path,
         wg_server_private_key=wg_srv_priv,
+        wg_client_network=(ns.wg_client_network or "").strip(),
         mtproxy_port=ns.mtproxy_port,
         mtproxy_secret=mt_sec,
         vpm_http_port=ns.vpm_http_port,

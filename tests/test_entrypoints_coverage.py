@@ -5,6 +5,7 @@ from __future__ import annotations
 import runpy
 import sys
 from pathlib import Path
+
 import pytest
 
 
@@ -24,5 +25,3 @@ def test_cli_module_main_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     with pytest.raises(SystemExit) as ei:
         runpy.run_path(str(cli_py), run_name="__main__")
     assert ei.value.code == 0
-
-

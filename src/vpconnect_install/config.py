@@ -12,6 +12,7 @@ from pathlib import Path
 
 from vpconnect_install import defaults as d
 from vpconnect_install.remote_scripts_fetch import parse_github_repo_url
+from vpconnect_install.wg_client_network import parse_optional_wg_client_network
 
 
 def _port_ok(p: int) -> bool:
@@ -55,6 +56,8 @@ class ProvisionConfig:
     wg_client_config_path: str = d.WG_CLIENT_CONFIG_PATH_DEFAULT
     # Одна строка (wg genkey); при непустом значении загружается на сервер и передаётся в 06_setwireguard.sh
     wg_server_private_key: str = ""
+    # Сеть клиентских адресов WG: после validate — нормализованный ``x.y.z.1/24`` или пусто (умолчание 06)
+    wg_client_network: str = ""
 
     set_mtproxy: bool = False
     mtproxy_port: int = d.MTPROXY_PORT_DEFAULT
@@ -99,6 +102,7 @@ class ProvisionConfig:
         _validate_ssh_credentials(self)
         _validate_vpconfigure_repo(self)
         _validate_domain_manual(self)
+        _validate_wg_client_network(self)
 
 
 def _validate_required_ports(cfg: ProvisionConfig) -> None:
@@ -143,3 +147,27 @@ def _validate_domain_manual(cfg: ProvisionConfig) -> None:
         return
     if cfg.domain is not None and not cfg.domain.strip():
         raise ValueError("domain must be non-empty when specified")
+
+
+def _validate_wg_client_network(cfg: ProvisionConfig) -> None:
+    """Нормализовать «Сеть WG подключений» в ``x.y.z.1/24`` или очистить при пустом вводе."""
+    if not cfg.set_wireguard:
+        cfg.wg_client_network = ""
+        return
+    raw = (cfg.wg_client_network or "").strip()
+    if not raw:
+        cfg.wg_client_network = ""
+        return
+    try:
+        pair = parse_optional_wg_client_network(raw)
+    except ValueError as e:
+        raise ValueError(
+            "Сеть WG подключений: неверный формат. Укажите пусто, CIDR (например 10.0.0.0/24), "
+            "адрес сети или сервера, либо не менее двух октетов (например 10.8). "
+            f"Исправьте ввод: {e}"
+        ) from e
+    if pair is None:
+        cfg.wg_client_network = ""
+        return
+    addr, _net = pair
+    cfg.wg_client_network = addr

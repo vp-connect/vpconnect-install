@@ -195,6 +195,157 @@ def run_04_connect_steps(
     artifact_persist("после 04_setsystemaccess.sh")
 
 
+def _run_phase_05_setdomain(
+    log: LogFn,
+    session: SSHSession,
+    configure_dir: str,
+    os_branch: str,
+    config: ProvisionConfig,
+    tmo: int,
+    artifact_persist: Callable[[str], None],
+) -> bool:
+    if not _need_run_05(config):
+        return False
+    parts: list[str] = ["--persist"]
+    dom = (config.domain or "").strip()
+    if dom:
+        parts.append(f"--domain {shlex.quote(dom)}")
+    extra = " " + " ".join(parts)
+    _run_configure_script(
+        log,
+        session,
+        configure_dir,
+        "05_setdomain.sh",
+        os_branch,
+        extra,
+        tmo,
+        blank_before=True,
+    )
+    artifact_persist("после 05_setdomain.sh")
+    return True
+
+
+def _run_phase_06_wireguard(
+    log: LogFn,
+    session: SSHSession,
+    configure_dir: str,
+    os_branch: str,
+    config: ProvisionConfig,
+    tmo: int,
+    remote_home: str,
+    access_state: AccessFileState,
+    artifact_persist: Callable[[str], None],
+) -> bool:
+    if not config.set_wireguard:
+        return False
+    cert = config.wg_client_cert_path.strip() or d.WG_CLIENT_CERT_PATH_DEFAULT
+    cdir = config.wg_client_config_path.strip() or d.WG_CLIENT_CONFIG_PATH_DEFAULT
+    extra = (
+        f" --wg-port {int(config.wg_port)}"
+        f" --wg-client-cert-path {shlex.quote(cert)}"
+        f" --wg-client-config-path {shlex.quote(cdir)}"
+        " --persist"
+    )
+    wgn = (config.wg_client_network or "").strip()
+    if wgn:
+        extra += f" --wg-address {shlex.quote(wgn)}"
+    wg_priv_remote = ""
+    wgk = (config.wg_server_private_key or "").strip()
+    if wgk:
+        wg_priv_remote = f"{remote_home.rstrip('/')}/.vpconnect_wg_server_private_key"
+        session.upload_bytes(wg_priv_remote, (wgk.splitlines()[0].strip() + "\n").encode("utf-8"))
+        _chmod_remote(log, session, wg_priv_remote, 30)
+        extra += f" --wg-server-private-key-file {shlex.quote(wg_priv_remote)}"
+    _run_configure_script(
+        log,
+        session,
+        configure_dir,
+        "06_setwireguard.sh",
+        os_branch,
+        extra,
+        tmo,
+        blank_before=True,
+    )
+    if wg_priv_remote:
+        session.exec_command(f"rm -f {shlex.quote(wg_priv_remote)}", timeout=30)
+    pub_remote = f"{cert.rstrip('/')}/wg_server_public.key"
+    try:
+        raw = session.download_bytes(pub_remote)
+        access_state.wireguard_public_key = raw.decode("utf-8", errors="replace").strip()
+    except Exception as ex:
+        log(f"[vpconnect-configure] Не прочитан публичный ключ WG ({pub_remote}): {ex}")
+    artifact_persist("после 06_setwireguard.sh")
+    return True
+
+
+def _run_phase_07_mtproxy(
+    log: LogFn,
+    session: SSHSession,
+    configure_dir: str,
+    os_branch: str,
+    config: ProvisionConfig,
+    tmo: int,
+    access_state: AccessFileState,
+    artifact_persist: Callable[[str], None],
+) -> bool:
+    if not config.set_mtproxy:
+        return False
+    extra = f" --mtproxy-port {int(config.mtproxy_port)} --persist"
+    mts = (config.mtproxy_secret or "").strip()
+    if mts:
+        extra += f" --mtproxy-secret {shlex.quote(mts)}"
+    out_07 = _run_configure_script(
+        log,
+        session,
+        configure_dir,
+        "07_setmtproxy.sh",
+        os_branch,
+        extra,
+        tmo,
+        blank_before=True,
+    )
+    sec_path = _mtproxy_secret_path_from_07_stdout(out_07) or _DEFAULT_REMOTE_MTPROXY_SECRET_PATH
+    try:
+        sec_raw = session.download_bytes(sec_path)
+        access_state.mtproxy_secret = sec_raw.decode("utf-8", errors="replace").strip()
+    except Exception as ex:
+        log(f"[vpconnect-configure] Не прочитан MTProxy secret ({sec_path}): {ex}")
+    artifact_persist("после 07_setmtproxy.sh")
+    return True
+
+
+def _run_phase_08_vpmanage(
+    log: LogFn,
+    session: SSHSession,
+    configure_dir: str,
+    os_branch: str,
+    config: ProvisionConfig,
+    tmo: int,
+    artifact_persist: Callable[[str], None],
+) -> bool:
+    if not config.set_vpmanage:
+        return False
+    vp_args = [f"--http-port {int(config.vpm_http_port)}", "--persist"]
+    if config.vpm_password.strip():
+        vp_args.append(f"--vpm-password {shlex.quote(config.vpm_password.strip())}")
+    extra = " " + " ".join(vp_args)
+    out_08 = _run_configure_script(
+        log,
+        session,
+        configure_dir,
+        "08_setvpmanage.sh",
+        os_branch,
+        extra,
+        tmo,
+        blank_before=True,
+    )
+    parsed_pw = _vpm_password_from_08_stdout(out_08)
+    if parsed_pw:
+        config.vpm_password = parsed_pw
+    artifact_persist("после 08_setvpmanage.sh")
+    return True
+
+
 def run_vpconfigure_phases_05_to_08(
     session: SSHSession,
     configure_dir: str,
@@ -214,107 +365,29 @@ def run_vpconfigure_phases_05_to_08(
     """
     tmo = min(timeout, 3600)
     ran_any_step = False
-
-    if _need_run_05(config):
-        parts: list[str] = ["--persist"]
-        dom = (config.domain or "").strip()
-        if dom:
-            parts.append(f"--domain {shlex.quote(dom)}")
-        extra = " " + " ".join(parts)
-        _run_configure_script(
-            log,
-            session,
-            configure_dir,
-            "05_setdomain.sh",
-            os_branch,
-            extra,
-            tmo,
-            blank_before=True,
-        )
-        artifact_persist("после 05_setdomain.sh")
-        ran_any_step = True
-
-    if config.set_wireguard:
-        cert = config.wg_client_cert_path.strip() or d.WG_CLIENT_CERT_PATH_DEFAULT
-        cdir = config.wg_client_config_path.strip() or d.WG_CLIENT_CONFIG_PATH_DEFAULT
-        extra = (
-            f" --wg-port {int(config.wg_port)}"
-            f" --wg-client-cert-path {shlex.quote(cert)}"
-            f" --wg-client-config-path {shlex.quote(cdir)}"
-            " --persist"
-        )
-        wg_priv_remote = ""
-        wgk = (config.wg_server_private_key or "").strip()
-        if wgk:
-            wg_priv_remote = f"{remote_home.rstrip('/')}/.vpconnect_wg_server_private_key"
-            session.upload_bytes(wg_priv_remote, (wgk.splitlines()[0].strip() + "\n").encode("utf-8"))
-            _chmod_remote(log, session, wg_priv_remote, 30)
-            extra += f" --wg-server-private-key-file {shlex.quote(wg_priv_remote)}"
-        _run_configure_script(
-            log,
-            session,
-            configure_dir,
-            "06_setwireguard.sh",
-            os_branch,
-            extra,
-            tmo,
-            blank_before=True,
-        )
-        if wg_priv_remote:
-            session.exec_command(f"rm -f {shlex.quote(wg_priv_remote)}", timeout=30)
-        pub_remote = f"{cert.rstrip('/')}/wg_server_public.key"
-        try:
-            raw = session.download_bytes(pub_remote)
-            access_state.wireguard_public_key = raw.decode("utf-8", errors="replace").strip()
-        except Exception as ex:
-            log(f"[vpconnect-configure] Не прочитан публичный ключ WG ({pub_remote}): {ex}")
-        artifact_persist("после 06_setwireguard.sh")
-        ran_any_step = True
-
-    if config.set_mtproxy:
-        extra = f" --mtproxy-port {int(config.mtproxy_port)} --persist"
-        mts = (config.mtproxy_secret or "").strip()
-        if mts:
-            extra += f" --mtproxy-secret {shlex.quote(mts)}"
-        out_07 = _run_configure_script(
-            log,
-            session,
-            configure_dir,
-            "07_setmtproxy.sh",
-            os_branch,
-            extra,
-            tmo,
-            blank_before=True,
-        )
-        sec_path = _mtproxy_secret_path_from_07_stdout(out_07) or _DEFAULT_REMOTE_MTPROXY_SECRET_PATH
-        try:
-            sec_raw = session.download_bytes(sec_path)
-            access_state.mtproxy_secret = sec_raw.decode("utf-8", errors="replace").strip()
-        except Exception as ex:
-            log(f"[vpconnect-configure] Не прочитан MTProxy secret ({sec_path}): {ex}")
-        artifact_persist("после 07_setmtproxy.sh")
-        ran_any_step = True
-
-    if config.set_vpmanage:
-        vp_args = [f"--http-port {int(config.vpm_http_port)}", "--persist"]
-        if config.vpm_password.strip():
-            vp_args.append(f"--vpm-password {shlex.quote(config.vpm_password.strip())}")
-        extra = " " + " ".join(vp_args)
-        out_08 = _run_configure_script(
-            log,
-            session,
-            configure_dir,
-            "08_setvpmanage.sh",
-            os_branch,
-            extra,
-            tmo,
-            blank_before=True,
-        )
-        parsed_pw = _vpm_password_from_08_stdout(out_08)
-        if parsed_pw:
-            config.vpm_password = parsed_pw
-        artifact_persist("после 08_setvpmanage.sh")
-        ran_any_step = True
+    ran_any_step |= _run_phase_05_setdomain(log, session, configure_dir, os_branch, config, tmo, artifact_persist)
+    ran_any_step |= _run_phase_06_wireguard(
+        log,
+        session,
+        configure_dir,
+        os_branch,
+        config,
+        tmo,
+        remote_home,
+        access_state,
+        artifact_persist,
+    )
+    ran_any_step |= _run_phase_07_mtproxy(
+        log,
+        session,
+        configure_dir,
+        os_branch,
+        config,
+        tmo,
+        access_state,
+        artifact_persist,
+    )
+    ran_any_step |= _run_phase_08_vpmanage(log, session, configure_dir, os_branch, config, tmo, artifact_persist)
 
     if not ran_any_step:
         artifact_persist("шаги 05–08 не запускались (все отключены в конфигурации)")

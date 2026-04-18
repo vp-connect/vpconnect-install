@@ -155,14 +155,7 @@ def write_secret_file(bundle: ArtifactBundle, filename: str, content: str) -> Pa
     return p
 
 
-def write_access_file(
-    bundle: ArtifactBundle,
-    config: ProvisionConfig,
-    state: AccessFileState,
-) -> Path:
-    """Записать ``ACCESS.txt`` из конфигурации и накопленного ``state`` (идемпотентно по содержимому файла)."""
-    target = config.effective_domain_or_ip or config.host
-    ssh_port = config.new_ssh_port if config.new_ssh_port is not None else config.port
+def _access_header_lines(bundle: ArtifactBundle, config: ProvisionConfig, target: str, ssh_port: int) -> list[str]:
     ssh_cmd = _access_ssh_command(bundle, config, target, ssh_port)
     lines = [
         f"Host: {config.host}",
@@ -172,33 +165,70 @@ def write_access_file(
     if bundle.private_key_path is not None:
         lines.append(f"Operator private key (generated): {bundle.private_key_path}")
     lines.extend([f"SSH command: {ssh_cmd}", ""])
-    if config.set_wireguard:
-        lines.append(f"WireGuard UDP port: {config.wg_port}")
+    return lines
+
+
+def _access_wireguard_lines(config: ProvisionConfig) -> list[str]:
+    if not config.set_wireguard:
+        return []
+    lines = [f"WireGuard UDP port: {config.wg_port}"]
+    wgn = (config.wg_client_network or "").strip()
+    if wgn:
+        lines.append(f"WireGuard server address (normalized): {wgn}")
+    return lines
+
+
+def _access_mtproxy_lines(config: ProvisionConfig, state: AccessFileState) -> list[str]:
+    lines: list[str] = []
     if config.set_mtproxy:
         lines.append(f"MTProxy TCP port: {config.mtproxy_port}")
     if state.mtproxy_secret:
         lines.append(f"MTProxy secret (hex): {state.mtproxy_secret}")
-    if state.wireguard_public_key:
-        lines.extend(["", "WireGuard server public key:", state.wireguard_public_key.strip(), ""])
-    if config.set_vpmanage:
-        lines.extend(
-            [
-                f"VPManage HTTP port: {config.vpm_http_port}",
-                f"VPManage URL: http://{target}:{config.vpm_http_port}/",
-            ]
-        )
-        if config.vpm_password.strip():
-            lines.append(f"VPManage admin password: {config.vpm_password.strip()}")
-    lines.extend(
-        [
-            "",
-            f"use_public_ip: {config.use_public_ip}",
-        ]
-    )
+    return lines
+
+
+def _access_wg_public_key_lines(state: AccessFileState) -> list[str]:
+    if not state.wireguard_public_key:
+        return []
+    return ["", "WireGuard server public key:", state.wireguard_public_key.strip(), ""]
+
+
+def _access_vpmanage_lines(config: ProvisionConfig, target: str) -> list[str]:
+    if not config.set_vpmanage:
+        return []
+    lines = [
+        f"VPManage HTTP port: {config.vpm_http_port}",
+        f"VPManage URL: http://{target}:{config.vpm_http_port}/",
+    ]
+    if config.vpm_password.strip():
+        lines.append(f"VPManage admin password: {config.vpm_password.strip()}")
+    return lines
+
+
+def _access_footer_lines(config: ProvisionConfig, state: AccessFileState) -> list[str]:
+    lines = ["", f"use_public_ip: {config.use_public_ip}"]
     if config.domain:
         lines.append(f"Domain (FQDN): {config.domain}")
     if state.last_saved_after:
         lines.extend(["", f"Last artifact save: {state.last_saved_after}"])
+    return lines
+
+
+def write_access_file(
+    bundle: ArtifactBundle,
+    config: ProvisionConfig,
+    state: AccessFileState,
+) -> Path:
+    """Записать ``ACCESS.txt`` из конфигурации и накопленного ``state`` (идемпотентно по содержимому файла)."""
+    target = config.effective_domain_or_ip or config.host
+    ssh_port = config.new_ssh_port if config.new_ssh_port is not None else config.port
+    lines: list[str] = []
+    lines.extend(_access_header_lines(bundle, config, target, ssh_port))
+    lines.extend(_access_wireguard_lines(config))
+    lines.extend(_access_mtproxy_lines(config, state))
+    lines.extend(_access_wg_public_key_lines(state))
+    lines.extend(_access_vpmanage_lines(config, target))
+    lines.extend(_access_footer_lines(config, state))
     path = bundle.root / "ACCESS.txt"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

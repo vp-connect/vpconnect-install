@@ -188,6 +188,31 @@ def test_phases_06_wg_server_private_key_uploaded(mock_run: MagicMock) -> None:
 
 
 @patch("vpconnect_install.vpconfigure_provision._run_configure_script")
+def test_phases_06_passes_wg_address_when_set(mock_run: MagicMock) -> None:
+    session = MagicMock()
+    session.download_bytes.return_value = b"pub\n"
+    cfg = _cfg(auto_setup=False, set_wireguard=True, set_domain=False, domain=None)
+    cfg.set_mtproxy = False
+    cfg.set_vpmanage = False
+    cfg.wg_client_network = "10.9.0.1/24"
+    mock_run.return_value = "result:success; message:ok\n"
+    run_vpconfigure_phases_05_to_08(
+        session,
+        "/cfg",
+        "debian",
+        cfg,
+        lambda _m: None,
+        60,
+        remote_home="/root",
+        access_state=AccessFileState(),
+        artifact_persist=lambda _x: None,
+    )
+    wg_extra = [c[0][5] for c in mock_run.call_args_list if c[0][3] == "06_setwireguard.sh"][0]
+    assert "--wg-address" in wg_extra
+    assert "10.9.0.1/24" in wg_extra
+
+
+@patch("vpconnect_install.vpconfigure_provision._run_configure_script")
 def test_phases_07_passes_mtproxy_secret(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.return_value = b"ab"

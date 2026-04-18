@@ -24,6 +24,7 @@ from vpconnect_install.gui_clipboard import (
 from vpconnect_install.gui_extended_hint import bind_extended_hint
 from vpconnect_install.outputs import open_directory_in_file_manager
 from vpconnect_install.runner import run
+from vpconnect_install.wg_client_network import DEFAULT_WG_ADDRESS_CIDR, normalize_wg_client_network
 
 # Высота лога в строках в расширенном режиме; в упрощённом лог растягивается по вертикали.
 _LOG_LINES_COMPACT = 6
@@ -53,18 +54,28 @@ def _parse_required_ssh_port(entry: ttk.Entry) -> int:
     return p
 
 
+def _secret_entry_show_plain(entry: ttk.Entry) -> None:
+    """Показать вводимые символы (пока поле в фокусе)."""
+    entry.configure(show="")
+
+
+def _secret_entry_mask(entry: ttk.Entry) -> None:
+    """Скрыть символы звёздочками (поле без фокуса)."""
+    entry.configure(show="*")
+
+
 def _wire_mask_secret_on_blur(entry: ttk.Entry) -> None:
     """Пока фокус в поле — видимые символы; без фокуса — звёздочки."""
 
     def on_focus_in(_event: tk.Event | None = None) -> None:
-        entry.configure(show="")
+        _secret_entry_show_plain(entry)
 
     def on_focus_out(_event: tk.Event | None = None) -> None:
-        entry.configure(show="*")
+        _secret_entry_mask(entry)
 
     entry.bind("<FocusIn>", on_focus_in, add=True)
     entry.bind("<FocusOut>", on_focus_out, add=True)
-    entry.configure(show="*")
+    _secret_entry_mask(entry)
 
 
 def _parse_optional_port(entry: ttk.Entry) -> int | None:
@@ -90,6 +101,7 @@ def _build_config(
     vpconfigure_repo_url: str,
     set_wg: bool,
     wg_port: int,
+    wg_client_network: str,
     wg_cert: str,
     wg_conf: str,
     wg_server_private_key: str,
@@ -122,6 +134,7 @@ def _build_config(
         vpconfigure_repo_url=vpconfigure_repo_url.strip() or d.VPCONFIGURE_REPO_URL_DEFAULT,
         set_wireguard=set_wg if not auto_setup else True,
         wg_port=wg_port,
+        wg_client_network=wg_client_network.strip(),
         wg_client_cert_path=wg_cert.strip() or d.WG_CLIENT_CERT_PATH_DEFAULT,
         wg_client_config_path=wg_conf.strip() or d.WG_CLIENT_CONFIG_PATH_DEFAULT,
         wg_server_private_key=wg_server_private_key.strip(),
@@ -313,24 +326,31 @@ class ProvisionerGUI:
         self.wg_port.insert(0, str(d.WG_PORT_DEFAULT))
         self.wg_port.grid(row=1, column=1, sticky="w", padx=4)
         bind_extended_hint(self.root, [wgp_lbl, self.wg_port], gh.WIREGUARD_UDP_PORT)
+        wgn_lbl = ttk.Label(wgf, text=gc.CAP_WG_CLIENT_NETWORK)
+        wgn_lbl.grid(row=2, column=0, sticky="e")
+        self.wg_net = ttk.Entry(wgf, width=40)
+        self.wg_net.insert(0, DEFAULT_WG_ADDRESS_CIDR)
+        self.wg_net.grid(row=2, column=1, sticky="ew", padx=4)
+        bind_extended_hint(self.root, [wgn_lbl, self.wg_net], gh.WIREGUARD_CLIENT_NETWORK)
+        self.wg_net.bind("<FocusOut>", self._wg_net_silent_normalize_on_focus_out)
         wgc_lbl = ttk.Label(wgf, text=gc.CAP_WG_CLIENT_CERT)
-        wgc_lbl.grid(row=2, column=0, sticky="e")
+        wgc_lbl.grid(row=3, column=0, sticky="e")
         self.wg_cert = ttk.Entry(wgf, width=40)
         self.wg_cert.insert(0, d.WG_CLIENT_CERT_PATH_DEFAULT)
-        self.wg_cert.grid(row=2, column=1, sticky="ew", padx=4)
+        self.wg_cert.grid(row=3, column=1, sticky="ew", padx=4)
         bind_extended_hint(self.root, [wgc_lbl, self.wg_cert], gh.WIREGUARD_CLIENT_CERT_PATH)
         wgf_lbl = ttk.Label(wgf, text=gc.CAP_WG_CLIENT_CONFIG)
-        wgf_lbl.grid(row=3, column=0, sticky="e")
+        wgf_lbl.grid(row=4, column=0, sticky="e")
         self.wg_conf = ttk.Entry(wgf, width=40)
         self.wg_conf.insert(0, d.WG_CLIENT_CONFIG_PATH_DEFAULT)
-        self.wg_conf.grid(row=3, column=1, sticky="ew", padx=4)
+        self.wg_conf.grid(row=4, column=1, sticky="ew", padx=4)
         bind_extended_hint(self.root, [wgf_lbl, self.wg_conf], gh.WIREGUARD_CLIENT_CONFIG_PATH)
         wgs_lbl = ttk.Label(wgf, text=gc.CAP_WG_SERVER_PRIVATE_KEY)
-        wgs_lbl.grid(row=4, column=0, sticky="ne")
+        wgs_lbl.grid(row=5, column=0, sticky="ne")
         self.wg_server_priv = ttk.Entry(wgf, width=40)
-        self.wg_server_priv.grid(row=4, column=1, sticky="ew", padx=4)
+        self.wg_server_priv.grid(row=5, column=1, sticky="ew", padx=4)
         bind_extended_hint(self.root, [wgs_lbl, self.wg_server_priv], gh.WIREGUARD_SERVER_PRIVATE_KEY_REUSE)
-        self._wg_widgets = [self.wg_port, self.wg_cert, self.wg_conf, self.wg_server_priv]
+        self._wg_widgets = [self.wg_port, self.wg_net, self.wg_cert, self.wg_conf, self.wg_server_priv]
         ar += 1
 
         self.set_mt_var = tk.BooleanVar(value=True)
@@ -368,8 +388,9 @@ class ProvisionerGUI:
         bind_extended_hint(self.root, [vpmh_lbl, self.vpm_http], gh.VPMANAGE_HTTP_PORT)
         vpmp_lbl = ttk.Label(vpmf, text=gc.CAP_VPM_PASSWORD)
         vpmp_lbl.grid(row=2, column=0, sticky="e")
-        self.vpm_pw = ttk.Entry(vpmf, width=40, show="*")
+        self.vpm_pw = ttk.Entry(vpmf, width=40)
         self.vpm_pw.grid(row=2, column=1, sticky="ew", padx=4)
+        _wire_mask_secret_on_blur(self.vpm_pw)
         bind_extended_hint(self.root, [vpmp_lbl, self.vpm_pw], gh.VPMANAGE_PASSWORD)
         self._vpm_widgets = [self.vpm_http, self.vpm_pw]
 
@@ -389,7 +410,7 @@ class ProvisionerGUI:
             self.log_outer, height=_LOG_LINES_MIN_STRETCH, state="disabled", wrap="word"
         )
         self.log_widget.grid(row=1, column=0, sticky="nsew", pady=(0, 4))
-        bind_extended_hint(self.root, [log_lbl, self.log_widget], gh.LOG_PANEL)
+        bind_extended_hint(self.root, [log_lbl], gh.LOG_PANEL)
 
         self.root.after(200, self._drain_log)
         install_ttk_entry_clipboard_and_context_menu(self.root)
@@ -442,6 +463,21 @@ class ProvisionerGUI:
     def _toggle_wg(self) -> None:
         st = "disabled" if not self.set_wg_var.get() else "!disabled"
         self._state_widgets(self._wg_widgets, st)
+
+    def _wg_net_silent_normalize_on_focus_out(self, _event: object | None = None) -> None:
+        """Тихая нормализация до ``x.y.z.1/24`` при потере фокуса;
+        при ошибке — без диалогов (валидация только на Start)."""
+        if not self.set_wg_var.get():
+            return
+        raw = self.wg_net.get().strip()
+        if not raw:
+            return
+        try:
+            addr, _net = normalize_wg_client_network(raw)
+        except ValueError:
+            return
+        self.wg_net.delete(0, "end")
+        self.wg_net.insert(0, addr)
 
     def _toggle_mt(self) -> None:
         st = "disabled" if not self.set_mt_var.get() else "!disabled"
@@ -544,6 +580,7 @@ class ProvisionerGUI:
                 vpconfigure_repo_url=self.vpconfigure_repo_ent.get(),
                 set_wg=self.set_wg_var.get(),
                 wg_port=_parse_int(self.wg_port, d.WG_PORT_DEFAULT),
+                wg_client_network=self.wg_net.get(),
                 wg_cert=self.wg_cert.get(),
                 wg_conf=self.wg_conf.get(),
                 wg_server_private_key=self.wg_server_priv.get(),

@@ -111,3 +111,21 @@ def test_apply_auto_setup_preserves_explicit_new_root_password() -> None:
     )
     cfg.apply_auto_setup()
     assert cfg.new_root_password == "fixed-pass"
+
+
+def test_validate_wg_client_network_normalizes_when_wireguard_on() -> None:
+    cfg = _valid_extended(set_wireguard=True, wg_client_network="10.0")
+    cfg.validate()
+    assert cfg.wg_client_network == "10.0.0.1/24"
+
+
+def test_validate_wg_client_network_cleared_when_wireguard_off() -> None:
+    cfg = _valid_extended(set_wireguard=False, wg_client_network="10.0.0.0/24")
+    cfg.validate()
+    assert cfg.wg_client_network == ""
+
+
+def test_validate_wg_client_network_rejects_garbage() -> None:
+    cfg = _valid_extended(set_wireguard=True, wg_client_network="not-an-ip")
+    with pytest.raises(ValueError, match="Сеть WG подключений"):
+        cfg.validate()

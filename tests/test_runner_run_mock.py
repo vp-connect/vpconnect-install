@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from vpconnect_install import defaults as d
 from vpconnect_install.config import ProvisionConfig
 from vpconnect_install.runner import run

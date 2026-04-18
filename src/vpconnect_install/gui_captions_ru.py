@@ -42,6 +42,7 @@ CAP_DOMAIN_FQDN = "Домен (FQDN)"
 CAP_SECTION_WIREGUARD = "WireGuard (VPN сервер)"
 CAP_INSTALL = "Установить"
 CAP_WG_UDP_PORT = "Порт UDP"
+CAP_WG_CLIENT_NETWORK = "Сеть WG подключений"
 CAP_WG_CLIENT_CERT = "Каталог сертификатов (на сервере)"
 CAP_WG_CLIENT_CONFIG = "Каталог конфигураций (на сервере)"
 CAP_WG_SERVER_PRIVATE_KEY = "Приватный ключ WG сервера"
@@ -62,4 +63,3 @@ CAP_EXIT = "Exit"
 
 # Лог (последний)
 CAP_LOG = "Log"
-

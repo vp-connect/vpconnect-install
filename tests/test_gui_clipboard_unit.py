@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 tkinter = pytest.importorskip("tkinter")
-from tkinter import ttk
+from tkinter import ttk  # noqa: E402
 
-from vpconnect_install.gui_clipboard import (
+from vpconnect_install.gui_clipboard import (  # noqa: E402
     clipboard_action_from_key_event,
     install_text_clipboard_and_context_menu,
     install_ttk_entry_clipboard_and_context_menu,

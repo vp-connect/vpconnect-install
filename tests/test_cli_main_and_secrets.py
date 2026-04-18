@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from vpconnect_install.cli import build_arg_parser, config_from_args, main
 
 

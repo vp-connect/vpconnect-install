@@ -84,7 +84,9 @@ is_ssh_port() {
   if command -v sshd >/dev/null 2>&1; then
     sshd -T 2>/dev/null | awk '/^port[[:space:]]+/ {print $2}' | grep -Fxq "$p" && return 0
   fi
-  if [ -r /etc/ssh/sshd_config ] && grep -Eiq "^[[:space:]]*Port[[:space:]]+$p([[:space:]]|$)" /etc/ssh/sshd_config; then
+  if [ -r /etc/ssh/sshd_config ] \
+    && grep -Eiq "^[[:space:]]*Port[[:space:]]+$p([[:space:]]|$)" \
+      /etc/ssh/sshd_config; then
     return 0
   fi
   return 1
@@ -104,7 +106,9 @@ is_wireguard_port() {
 is_mtproxy_port() {
   local p="$1"
   if [ -r /etc/systemd/system/mtproxy.service ] \
-    && grep -Eq "(^|[[:space:]])-H[[:space:]]+$p([[:space:]]|$)|(^|[[:space:]])-p[[:space:]]+$p([[:space:]]|$)" /etc/systemd/system/mtproxy.service; then
+    && grep -Eq \
+      "(^|[[:space:]])-H[[:space:]]+$p([[:space:]]|$)|(^|[[:space:]])-p[[:space:]]+$p([[:space:]]|$)" \
+      /etc/systemd/system/mtproxy.service; then
     return 0
   fi
   if command -v systemctl >/dev/null 2>&1; then
@@ -126,7 +130,8 @@ is_vpmanage_port() {
       && return 0
   fi
   if [ -r /root/.vpconnect-configure.env ] \
-    && grep -Eq "^[[:space:]]*export[[:space:]]+VPCONFIGURE_VPM_HTTP_PORT=$p([[:space:]]|$)" /root/.vpconnect-configure.env; then
+    && grep -Eq "^[[:space:]]*export[[:space:]]+VPCONFIGURE_VPM_HTTP_PORT=$p([[:space:]]|$)" \
+      /root/.vpconnect-configure.env; then
     return 0
   fi
   return 1
@@ -238,6 +243,67 @@ def _is_expected_reinstall_owner(check: PortCheck, details: str) -> bool:
     return False
 
 
+def _raise_missing_port_check_tool(log: LogFn, out_s: str, err_s: str) -> None:
+    log(f"[Порты] {err_s or out_s or 'Нет утилиты проверки портов'}")
+    log("[Порты] На Linux после 00_bashinstall.sh должен быть установлен пакет с ss (iproute2/iproute).")
+    log(INSTALL_ABORTED_MSG)
+    raise RuntimeError(INSTALL_ABORTED_MSG)
+
+
+def _partition_busy_lines(
+    busy_lines: list[str],
+    checks_by_spec: dict[str, PortCheck],
+) -> tuple[list[str], list[str]]:
+    allowed_reinstall: list[str] = []
+    blocked_unknown: list[str] = []
+    for ln in busy_lines:
+        payload = ln.split("BUSY:", 1)[1]
+        spec, _, details = payload.partition("|")
+        spec = spec.strip()
+        details = details.strip()
+        check = checks_by_spec.get(spec)
+        if check and _is_expected_reinstall_owner(check, details):
+            allowed_reinstall.append(
+                f"{spec} — {check.purpose}; обнаружен процесс: {details or 'неизвестно'}",
+            )
+            continue
+        purpose = check.purpose if check else "неизвестное назначение"
+        blocked_unknown.append(
+            f"{spec} — {purpose}; обнаружен процесс: {details or 'не удалось определить'}",
+        )
+    return allowed_reinstall, blocked_unknown
+
+
+def _log_busy_rows(log: LogFn, header: str, rows: list[str]) -> None:
+    log(header)
+    for row in rows:
+        log(f"[Порты]   {row}")
+
+
+def _raise_blocked_ports(log: LogFn, blocked_unknown: list[str]) -> None:
+    _log_busy_rows(log, "[Порты] Найдены занятые порты неизвестными/чужими приложениями:", blocked_unknown)
+    log(
+        "[Порты] Освободите эти порты на сервере или измените порты в настройках установки "
+        "(CLI / GUI) и повторите прогон."
+    )
+    log(INSTALL_ABORTED_MSG)
+    raise RuntimeError(INSTALL_ABORTED_MSG)
+
+
+def _raise_generic_port_check_failure(log: LogFn, code: int, err_s: str, out_s: str) -> None:
+    log(f"[Порты] Проверка завершилась с кодом {code}.")
+    if err_s:
+        log(f"[Порты] stderr:\n{err_s}")
+    if out_s:
+        log(f"[Порты] stdout:\n{out_s}")
+    log(
+        "[Порты] Освободите указанные порты на сервере или измените порты в настройках установки "
+        "(CLI / GUI) и повторите прогон."
+    )
+    log(INSTALL_ABORTED_MSG)
+    raise RuntimeError(INSTALL_ABORTED_MSG)
+
+
 def assert_remote_listen_ports_free(
     session: SSHSession,
     config: ProvisionConfig,
@@ -266,63 +332,24 @@ def assert_remote_listen_ports_free(
     err_s = (err or "").strip()
 
     if code == 2 or ("Не найдены" in err_s and code != 0):
-        log(f"[Порты] {err_s or out_s or 'Нет утилиты проверки портов'}")
-        log("[Порты] На Linux после 00_bashinstall.sh должен быть установлен пакет с ss (iproute2/iproute).")
-        log(INSTALL_ABORTED_MSG)
-        raise RuntimeError(INSTALL_ABORTED_MSG)
+        _raise_missing_port_check_tool(log, out_s, err_s)
 
     busy_lines = [ln.strip() for ln in (out or "").splitlines() if ln.strip().startswith("BUSY:")]
     if busy_lines:
-        allowed_reinstall: list[str] = []
-        blocked_unknown: list[str] = []
-        for ln in busy_lines:
-            payload = ln.split("BUSY:", 1)[1]
-            spec, _, details = payload.partition("|")
-            spec = spec.strip()
-            details = details.strip()
-            check = checks_by_spec.get(spec)
-            if check and _is_expected_reinstall_owner(check, details):
-                allowed_reinstall.append(
-                    f"{spec} — {check.purpose}; обнаружен процесс: {details or 'неизвестно'}",
-                )
-            else:
-                purpose = check.purpose if check else "неизвестное назначение"
-                blocked_unknown.append(
-                    f"{spec} — {purpose}; обнаружен процесс: {details or 'не удалось определить'}",
-                )
-
+        allowed_reinstall, blocked_unknown = _partition_busy_lines(busy_lines, checks_by_spec)
         if allowed_reinstall:
-            log("[Порты] Обнаружены порты, занятые уже установленными компонентами vpconnect (повторная установка):")
-            for row in allowed_reinstall:
-                log(f"[Порты]   {row}")
-
-        if blocked_unknown:
-            log("[Порты] Найдены занятые порты неизвестными/чужими приложениями:")
-            for row in blocked_unknown:
-                log(f"[Порты]   {row}")
-            log(
-                "[Порты] Освободите эти порты на сервере или измените порты в настройках установки "
-                "(CLI / GUI) и повторите прогон."
+            _log_busy_rows(
+                log,
+                "[Порты] Обнаружены порты, занятые уже установленными компонентами vpconnect (повторная установка):",
+                allowed_reinstall,
             )
-            log(INSTALL_ABORTED_MSG)
-            raise RuntimeError(INSTALL_ABORTED_MSG)
-
-        if code != 0:
-            # Код 1 в этом случае означает только busy-линии, уже классифицированные как допустимые.
+        if blocked_unknown:
+            _raise_blocked_ports(log, blocked_unknown)
+        if allowed_reinstall and code != 0:
             log("[Порты] Конфликты распознаны как повторная установка наших сервисов — продолжаю.")
             return
 
     if code != 0:
-        log(f"[Порты] Проверка завершилась с кодом {code}.")
-        if err_s:
-            log(f"[Порты] stderr:\n{err_s}")
-        if out_s:
-            log(f"[Порты] stdout:\n{out_s}")
-        log(
-            "[Порты] Освободите указанные порты на сервере или измените порты в настройках установки "
-            "(CLI / GUI) и повторите прогон."
-        )
-        log(INSTALL_ABORTED_MSG)
-        raise RuntimeError(INSTALL_ABORTED_MSG)
+        _raise_generic_port_check_failure(log, code, err_s, out_s)
 
     log("[Порты] Все проверяемые порты свободны.")

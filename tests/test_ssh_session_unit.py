@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import paramiko
 import pytest
@@ -28,7 +28,10 @@ def test_load_private_key_rsa_minimal(tmp_path: Path) -> None:
 def test_connect_raises_when_all_auth_fail() -> None:
     logs: list[str] = []
     s = SSHSession("127.0.0.1", 22, "root", password="", private_key_path="", log=logs.append)
-    with patch.object(s, "_attempt_private_key", return_value=False), patch.object(s, "_attempt_password", return_value=False):
+    with (
+        patch.object(s, "_attempt_private_key", return_value=False),
+        patch.object(s, "_attempt_password", return_value=False),
+    ):
         with pytest.raises(RuntimeError, match="не удалось подключиться"):
             s.connect()
     assert any("Не удалось" in m for m in logs)

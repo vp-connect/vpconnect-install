@@ -9,8 +9,8 @@ import pytest
 
 tkinter = pytest.importorskip("tkinter")
 
-from vpconnect_install import defaults as d
-from vpconnect_install.gui_tk import (
+from vpconnect_install import defaults as d  # noqa: E402
+from vpconnect_install.gui_tk import (  # noqa: E402
     ProvisionerGUI,
     _build_config,
     _parse_int,
@@ -72,6 +72,7 @@ def test_build_config_auto_vs_extended() -> None:
         vpconfigure_repo_url=d.VPCONFIGURE_REPO_URL_DEFAULT,
         set_wg=False,
         wg_port=1,
+        wg_client_network="",
         wg_cert="",
         wg_conf="",
         wg_server_private_key="",
@@ -100,6 +101,7 @@ def test_build_config_auto_vs_extended() -> None:
         vpconfigure_repo_url="",
         set_wg=True,
         wg_port=443,
+        wg_client_network="",
         wg_cert="",
         wg_conf="",
         wg_server_private_key="",
