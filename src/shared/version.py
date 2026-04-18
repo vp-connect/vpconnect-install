@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-__version__ = "1.0.2"
+__version__ = "1.0.4"
 
 
 def scripts_git_branch(dist_version: str) -> str:
