@@ -11,7 +11,7 @@ import pytest
 
 def test_vpconnect_install_main_module_invokes_cli_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    main_py = Path(__file__).resolve().parents[1] / "src" / "vpconnect_install" / "__main__.py"
+    main_py = Path(__file__).resolve().parents[2] / "src" / "vpconnect_install" / "__main__.py"
     monkeypatch.setattr(sys, "argv", [str(main_py), "--help"])
     with pytest.raises(SystemExit) as ei:
         runpy.run_path(str(main_py), run_name="__main__")
@@ -20,7 +20,7 @@ def test_vpconnect_install_main_module_invokes_cli_main(tmp_path: Path, monkeypa
 
 def test_cli_module_main_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    cli_py = Path(__file__).resolve().parents[1] / "src" / "cli" / "main.py"
+    cli_py = Path(__file__).resolve().parents[2] / "src" / "cli" / "main.py"
     monkeypatch.setattr(sys, "argv", [str(cli_py), "--help"])
     with pytest.raises(SystemExit) as ei:
         runpy.run_path(str(cli_py), run_name="__main__")
