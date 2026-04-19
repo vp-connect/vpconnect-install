@@ -100,6 +100,7 @@ def resolve_configure_install_dir(
     home: str,
     log: LogFn,
     stdout_from_03: str,
+    os_branch: str,
     timeout: int,
 ) -> str:
     """
@@ -120,7 +121,8 @@ def resolve_configure_install_dir(
         'printf "%s" "$HOME/vpconnect-configure"; '
         "fi"
     )
-    code, out, _err = session.exec_command(f"bash -lc {shlex.quote(inner)}", timeout=min(timeout, 60))
+    inner_with_branch = f"export VPCONFIGURE_GIT_BRANCH={shlex.quote(os_branch)} && {inner}"
+    code, out, _err = session.exec_command(f"bash -lc {shlex.quote(inner_with_branch)}", timeout=min(timeout, 60))
     resolved = (out or "").strip()
     if code == 0 and resolved:
         log(f"[vpconnect-configure] Каталог установки (окружение или умолчание): {resolved}")
@@ -130,10 +132,17 @@ def resolve_configure_install_dir(
     return fallback
 
 
-def verify_configure_scripts_dir(session: SSHSession, configure_dir: str, log: LogFn, timeout: int) -> None:
+def verify_configure_scripts_dir(
+    session: SSHSession,
+    configure_dir: str,
+    os_branch: str,
+    log: LogFn,
+    timeout: int,
+) -> None:
     """Проверка, что каталог есть и в нём лежит 04_setsystemaccess.sh."""
     inner = f"test -d {shlex.quote(configure_dir)} && test -f {shlex.quote(configure_dir + '/04_setsystemaccess.sh')}"
-    code, _o, e = session.exec_command(f"bash -lc {shlex.quote(inner)}", timeout=timeout)
+    inner_with_branch = f"export VPCONFIGURE_GIT_BRANCH={shlex.quote(os_branch)} && {inner}"
+    code, _o, e = session.exec_command(f"bash -lc {shlex.quote(inner_with_branch)}", timeout=timeout)
     if code != 0:
         log(f"Ошибка! Каталог скриптов не найден или нет 04_setsystemaccess.sh: {configure_dir}")
         log(f"[vpconnect-configure] {e.strip() or 'test не выполнен'}")
@@ -151,7 +160,8 @@ def _fetch_configure_script(repo_url: str, branch: str, name: str, timeout: int)
 
 
 def _remote_home(session: SSHSession, log: LogFn, timeout: int) -> str:
-    code, out, err = session.exec_command("bash -lc 'printf %s \"$HOME\"'", timeout=timeout)
+    # Этот вызов выполняется до запуска 00/01, поэтому используем POSIX sh (bash может ещё не быть установлен).
+    code, out, err = session.exec_command("sh -lc 'printf %s \"$HOME\"'", timeout=timeout)
     if code != 0:
         log(f"[vpconnect-configure] Не удалось получить $HOME: {err.strip() or out}")
         raise RuntimeError(INSTALL_ABORTED_MSG)
@@ -368,6 +378,6 @@ def run_vpconnect_configure_bootstrap(
 
     log("[vpconnect-configure] Шаги 00–03 завершены успешно.")
     assert os_branch is not None
-    configure_dir = resolve_configure_install_dir(session, home, log, stdout_03, min(60, timeout))
-    verify_configure_scripts_dir(session, configure_dir, log, min(30, timeout))
+    configure_dir = resolve_configure_install_dir(session, home, log, stdout_03, os_branch, min(60, timeout))
+    verify_configure_scripts_dir(session, configure_dir, os_branch, log, min(30, timeout))
     return home, os_branch, configure_dir

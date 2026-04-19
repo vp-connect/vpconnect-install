@@ -68,9 +68,18 @@ def _post_connect_params(config: ProvisionConfig) -> tuple[int, str, str]:
     return port, pw, key
 
 
-def _resolve_public_target(session: SSHSession, config: ProvisionConfig, log: LogFn) -> str:
+def _resolve_public_target(
+    session: SSHSession,
+    config: ProvisionConfig,
+    log: LogFn,
+    *,
+    os_branch: str | None = None,
+) -> str:
     """Определить публичный IPv4 на сервере по HTTP; при неудаче — ``config.host``."""
-    cmd = "bash -lc " + shlex.quote(_PUBLIC_IPV4_PROBE_BASH)
+    inner = _PUBLIC_IPV4_PROBE_BASH
+    if os_branch:
+        inner = f"export VPCONFIGURE_GIT_BRANCH={shlex.quote(os_branch)}; {inner}"
+    cmd = "bash -lc " + shlex.quote(inner)
     _code, out, _err = session.exec_command(cmd, timeout=30)
     ip = (out or "").strip()
     if not ip or " " in ip or ":" in ip:
@@ -90,14 +99,20 @@ def _want_public_ip(config: ProvisionConfig) -> bool:
     return bool(config.auto_setup or config.use_public_ip or config.set_domain)
 
 
-def _apply_effective_host(session: SSHSession, config: ProvisionConfig, log: LogFn) -> None:
+def _apply_effective_host(
+    session: SSHSession,
+    config: ProvisionConfig,
+    log: LogFn,
+    *,
+    os_branch: str | None = None,
+) -> None:
     """Заполнить ``config.effective_domain_or_ip`` по приоритету: FQDN, публичный IP, SSH host."""
     if config.domain and config.domain.strip():
         config.effective_domain_or_ip = config.domain.strip()
         log(f"[Группа: домен] Указанный FQDN: {config.effective_domain_or_ip}")
         return
     if _want_public_ip(config):
-        config.effective_domain_or_ip = _resolve_public_target(session, config, log)
+        config.effective_domain_or_ip = _resolve_public_target(session, config, log, os_branch=os_branch)
         return
     config.effective_domain_or_ip = config.host
     log(f"[Группа: домен] Используем host: {config.effective_domain_or_ip}")
@@ -159,14 +174,14 @@ def _maybe_reconnect_session(
     return _poll_ssh_after_finalize(config, post_port, post_pw, post_key, log, prefer_auth=prefer)
 
 
-def _request_reboot(session: SSHSession, log: LogFn) -> None:
+def _request_reboot(session: SSHSession, log: LogFn, *, os_branch: str | None = None) -> None:
     """Запросить перезагрузку сервера (best-effort).
 
     Важно: не бросаем исключение — установка уже выполнена; если reboot не удалось запросить,
     просто пишем предупреждение.
     """
 
-    cmd = "bash -lc " + shlex.quote(
+    inner = (
         "nohup sh -lc '"
         "command -v systemctl >/dev/null 2>&1 && systemctl reboot && exit 0; "
         "command -v shutdown >/dev/null 2>&1 && shutdown -r now && exit 0; "
@@ -174,6 +189,9 @@ def _request_reboot(session: SSHSession, log: LogFn) -> None:
         "exit 1"
         "' >/dev/null 2>&1 &"
     )
+    if os_branch:
+        inner = f"export VPCONFIGURE_GIT_BRANCH={shlex.quote(os_branch)}; {inner}"
+    cmd = "bash -lc " + shlex.quote(inner)
     code, _out, err = session.exec_command(cmd, timeout=30)
     if code != 0:
         log(f"[Перезагрузка] Предупреждение: не удалось запросить reboot: {err.strip() or 'unknown error'}")
@@ -270,7 +288,7 @@ def run(config: ProvisionConfig, log: LogFn | None = None, artifacts_base: Path 
             lg,
             on_script_ok=lambda name: artifact_persist(f"после {name}"),
         )
-        _apply_effective_host(session, config, lg)
+        _apply_effective_host(session, config, lg, os_branch=os_branch)
         artifact_persist("после определения effective host (домен / IP для URL)")
 
         if need_run_04_connect(config):
@@ -303,7 +321,7 @@ def run(config: ProvisionConfig, log: LogFn | None = None, artifacts_base: Path 
 
         # Перезагрузка — строго после успешной установки.
         prior_auth = session.auth_method
-        _request_reboot(session, lg)
+        _request_reboot(session, lg, os_branch=os_branch)
         _close_session_quietly(session)
         _poll_ssh_after_reboot(config, lg, prior_auth=prior_auth)
 
