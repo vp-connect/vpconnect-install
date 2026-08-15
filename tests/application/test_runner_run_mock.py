@@ -16,7 +16,7 @@ def _minimal_run_config(**kw: object) -> ProvisionConfig:
         port=22,
         root_password="pw",
         auto_setup=True,
-        set_wireguard=True,
+        set_vpserver=True,
         set_mtproxy=True,
         set_vpmanage=True,
         vpconfigure_repo_url=d.VPCONFIGURE_REPO_URL_DEFAULT,
@@ -102,7 +102,7 @@ def test_run_skips_04_when_not_needed(
     cfg.new_ssh_port = None
     cfg.new_ssh_public_key = ""
     cfg.enable_firewall = False
-    cfg.set_wireguard = False
+    cfg.set_vpserver = False
     cfg.set_mtproxy = False
     cfg.set_vpmanage = False
     cfg.domain = "d.example"

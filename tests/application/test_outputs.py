@@ -27,10 +27,10 @@ def _minimal_config(**overrides: object) -> ProvisionConfig:
         port=22,
         root_password="pw",
         auto_setup=False,
-        set_wireguard=True,
+        set_vpserver=True,
         set_mtproxy=True,
         set_vpmanage=True,
-        wg_port=d.WG_PORT_DEFAULT,
+        vp_port=d.VP_PORT_DEFAULT,
         mtproxy_port=d.MTPROXY_PORT_DEFAULT,
         vpm_http_port=d.VPM_HTTP_PORT_DEFAULT,
         vpconfigure_repo_url=d.VPCONFIGURE_REPO_URL_DEFAULT,
@@ -151,14 +151,14 @@ def test_write_access_file_generated_key_and_ports(tmp_path: Path) -> None:
         public_key_openssh="ssh-rsa AAA",
     )
     tmp_path.mkdir(parents=True, exist_ok=True)
-    state = AccessFileState(mtproxy_secret="deadbeef", wireguard_public_key="wgpub\n", last_saved_after="t0")
+    state = AccessFileState(mtproxy_secret="deadbeef", vpserver_public_key="wgpub\n", last_saved_after="t0")
     path = write_access_file(bundle, cfg, state)
     text = path.read_text(encoding="utf-8")
     assert "Host: 10.0.0.1" in text
     assert "SSH port: 2222" in text
     assert "-i " in text and "id_rsa" in text
     assert "MTProxy secret (hex): deadbeef" in text
-    assert "WireGuard server public key:" in text
+    assert "VP server public key:" in text
     assert "wgpub" in text
     assert "VPManage admin password: admin" in text
     assert "Last artifact save: t0" in text
@@ -188,19 +188,19 @@ def test_write_access_file_plain_ssh_no_key(tmp_path: Path) -> None:
     assert "-i " not in text.split("SSH command:")[1].split("\n")[0]
 
 
-def test_write_access_file_includes_wg_client_network_line_when_set(tmp_path: Path) -> None:
+def test_write_access_file_includes_vp_client_network_line_when_set(tmp_path: Path) -> None:
     """Строка ACCESS отражает поле конфигурации (нормализация — на этапе validate)."""
     cfg = _minimal_config()
-    cfg.wg_client_network = "10.9.0.1/24"
+    cfg.vp_client_network = "10.9.0.1/24"
     bundle = ArtifactBundle(root=tmp_path)
     tmp_path.mkdir(parents=True, exist_ok=True)
     text = write_access_file(bundle, cfg, AccessFileState()).read_text(encoding="utf-8")
-    assert "WireGuard server address (normalized): 10.9.0.1/24" in text
+    assert "VP server address (normalized): 10.9.0.1/24" in text
 
 
 def test_write_access_file_optional_sections_off(tmp_path: Path) -> None:
     cfg = _minimal_config(
-        set_wireguard=False,
+        set_vpserver=False,
         set_mtproxy=False,
         set_vpmanage=False,
         domain="ex.com",
@@ -208,7 +208,7 @@ def test_write_access_file_optional_sections_off(tmp_path: Path) -> None:
     bundle = ArtifactBundle(root=tmp_path)
     tmp_path.mkdir(parents=True, exist_ok=True)
     text = write_access_file(bundle, cfg, AccessFileState()).read_text(encoding="utf-8")
-    assert "WireGuard UDP port" not in text
+    assert "VP server UDP port" not in text
     assert "MTProxy TCP port" not in text
     assert "VPManage" not in text
     assert "Domain (FQDN): ex.com" in text

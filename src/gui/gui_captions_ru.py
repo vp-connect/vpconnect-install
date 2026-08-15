@@ -38,14 +38,17 @@ CAP_SECTION_DOMAIN = "Домен (имя сервера в конфигурац�
 CAP_SET_DOMAIN = "Указать домен"
 CAP_DOMAIN_FQDN = "Домен (FQDN)"
 
-# WireGuard
-CAP_SECTION_WIREGUARD = "WireGuard (VPN сервер)"
+# VPN server
+CAP_SECTION_VPSERVER = "VPN сервер"
 CAP_INSTALL = "Установить"
-CAP_WG_UDP_PORT = "Порт UDP"
-CAP_WG_CLIENT_NETWORK = "Сеть WG подключений"
-CAP_WG_CLIENT_CERT = "Каталог сертификатов (на сервере)"
-CAP_WG_CLIENT_CONFIG = "Каталог конфигураций (на сервере)"
-CAP_WG_SERVER_PRIVATE_KEY = "Приватный ключ WG сервера"
+CAP_VPSERVICE_TYPE = "Тип сервиса"
+CAP_VPSERVICE_WIREGUARD = "WireGuard"
+CAP_VPSERVICE_AMNEZIAWG = "AmneziaWG"
+CAP_VP_UDP_PORT = "Порт UDP"
+CAP_VP_CLIENT_NETWORK = "Сеть VPN подключений"
+CAP_VP_CLIENT_CERT = "Каталог сертификатов (на сервере)"
+CAP_VP_CLIENT_CONFIG = "Каталог конфигураций (на сервере)"
+CAP_VP_SERVER_PRIVATE_KEY = "Приватный ключ VPN сервера"
 
 # MTProxy
 CAP_SECTION_MTPROXY = "MTProxy (Proxy для Telegram)"

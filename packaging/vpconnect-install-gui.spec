@@ -38,7 +38,7 @@ a = Analysis(
         "config",
         "core",
         "core.github_repo",
-        "core.wg_client_network",
+        "core.vp_client_network",
         "shared",
         "shared.defaults",
         "shared.version",

@@ -37,16 +37,16 @@ def _secret(cli_value: str | None, env_name: str, file_arg: str | None) -> str:
 
 
 def _feature_flags_from_ns(ns: argparse.Namespace) -> tuple[bool, bool, bool]:
-    """Флаги WireGuard / MTProxy / VPManage с учётом ``--auto-setup`` и ``--no-*`` по умолчанию."""
-    wg, mt, vpm = ns.set_wireguard, ns.set_mtproxy, ns.set_vpmanage
+    """Флаги VP server / MTProxy / VPManage с учётом ``--auto-setup`` и ``--no-*`` по умолчанию."""
+    vp, mt, vpm = ns.set_vpserver, ns.set_mtproxy, ns.set_vpmanage
     if not ns.auto_setup:
         return (
-            False if wg is None else bool(wg),
+            False if vp is None else bool(vp),
             False if mt is None else bool(mt),
             False if vpm is None else bool(vpm),
         )
     return (
-        True if wg is None else bool(wg),
+        True if vp is None else bool(vp),
         True if mt is None else bool(mt),
         True if vpm is None else bool(vpm),
     )
@@ -56,7 +56,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Парсер аргументов для ``python -m vpconnect_install`` (без подкоманды ``gui``)."""
     p = argparse.ArgumentParser(
         prog="python -m vpconnect_install",
-        description="Provision server over SSH via vpconnect-configure (WireGuard, MTProxy, VPManage).",
+        description="Provision server over SSH via vpconnect-configure (VP server, MTProxy, VPManage).",
         epilog=_CLI_EPILOG,
     )
     p.add_argument("--host", required=True, help="Server IP or hostname (required)")
@@ -122,10 +122,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="GitHub repo vpconnect-configure (scripts 00–03, raw branch is always main)",
     )
     p.add_argument(
-        "--set-wireguard",
+        "--set-vpserver",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="Install WireGuard (when not using --auto-setup)",
+        help="Install VPN server (when not using --auto-setup)",
+    )
+    p.add_argument(
+        "--vp-service-type",
+        choices=("wireguard", "amneziawg"),
+        default="wireguard",
+        help="VPN server type for step 06 (wireguard or amneziawg)",
     )
     p.add_argument(
         "--set-mtproxy",
@@ -138,19 +144,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
     )
 
-    wg_g = p.add_argument_group("WireGuard")
-    wg_g.add_argument("--wg-port", type=int, default=d.WG_PORT_DEFAULT)
-    wg_g.add_argument("--wg-client-cert-path", default=d.WG_CLIENT_CERT_PATH_DEFAULT)
-    wg_g.add_argument("--wg-client-config-path", default=d.WG_CLIENT_CONFIG_PATH_DEFAULT)
-    wg_g.add_argument(
-        "--wg-server-private-key-file",
+    vp_g = p.add_argument_group("VPN server")
+    vp_g.add_argument("--vp-port", type=int, default=d.VP_PORT_DEFAULT)
+    vp_g.add_argument("--vp-client-cert-path", default=d.VP_CLIENT_CERT_PATH_DEFAULT)
+    vp_g.add_argument("--vp-client-config-path", default=d.VP_CLIENT_CONFIG_PATH_DEFAULT)
+    vp_g.add_argument(
+        "--vp-server-private-key-file",
         default=None,
-        help="Server private key file (one line, wg genkey); reuse for client continuity",
+        help="Server private key file (one line, wg genkey-compatible) for continuity",
     )
-    wg_g.add_argument(
-        "--wg-client-network",
+    vp_g.add_argument(
+        "--vp-client-network",
         default="",
-        help="WG client subnet hint: empty=default 10.8.0.1/24; or CIDR/partial octets (normalized to x.y.z.1/24)",
+        help="VPN client subnet hint: empty=default 10.8.0.1/24; or CIDR/partial octets (normalized to x.y.z.1/24)",
     )
 
     mt_g = p.add_argument_group("MTProxy")
@@ -196,15 +202,15 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
     )
     new_root = _secret(ns.new_root_password, "NEW_ROOT_PASSWORD", ns.new_root_password_file)
     vpm_pw = _secret(ns.vpm_password, "VPM_PASSWORD", ns.vpm_password_file)
-    wg_srv_priv = ""
-    if ns.wg_server_private_key_file:
-        wg_srv_priv = _read_file(ns.wg_server_private_key_file)
+    vp_srv_priv = ""
+    if ns.vp_server_private_key_file:
+        vp_srv_priv = _read_file(ns.vp_server_private_key_file)
     mt_sec = _secret(ns.mtproxy_secret, "MTPROXY_SECRET", ns.mtproxy_secret_file)
     extra_pub = ns.new_ssh_public_key or ""
     if ns.new_ssh_public_key_file:
         extra_pub = _read_file(ns.new_ssh_public_key_file)
 
-    set_wg, set_mt, set_vpm = _feature_flags_from_ns(ns)
+    set_vp, set_mt, set_vpm = _feature_flags_from_ns(ns)
 
     domain = ns.domain.strip() if ns.domain else None
 
@@ -229,14 +235,15 @@ def config_from_args(ns: argparse.Namespace) -> ProvisionConfig:
         set_domain=False,
         domain=domain,
         use_public_ip=bool(ns.use_public_ip),
-        set_wireguard=bool(set_wg),
+        set_vpserver=bool(set_vp),
+        vp_service_type=(ns.vp_service_type or "wireguard"),
         set_mtproxy=bool(set_mt),
         set_vpmanage=bool(set_vpm),
-        wg_port=ns.wg_port,
-        wg_client_cert_path=ns.wg_client_cert_path,
-        wg_client_config_path=ns.wg_client_config_path,
-        wg_server_private_key=wg_srv_priv,
-        wg_client_network=(ns.wg_client_network or "").strip(),
+        vp_port=ns.vp_port,
+        vp_client_cert_path=ns.vp_client_cert_path,
+        vp_client_config_path=ns.vp_client_config_path,
+        vp_server_private_key=vp_srv_priv,
+        vp_client_network=(ns.vp_client_network or "").strip(),
         mtproxy_port=ns.mtproxy_port,
         mtproxy_secret=mt_sec,
         vpm_http_port=ns.vpm_http_port,

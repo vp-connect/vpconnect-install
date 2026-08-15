@@ -138,7 +138,7 @@ def test_phases_05_only_domain(mock_run: MagicMock) -> None:
 def test_phases_06_wireguard_downloads_key(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.return_value = b"wg-pub-key\n"
-    cfg = _cfg(auto_setup=False, set_wireguard=True, set_domain=False, domain=None)
+    cfg = _cfg(auto_setup=False, set_vpserver=True, set_domain=False, domain=None)
     cfg.set_mtproxy = False
     cfg.set_vpmanage = False
     mock_run.return_value = "result:success; message:ok\n"
@@ -155,18 +155,19 @@ def test_phases_06_wireguard_downloads_key(mock_run: MagicMock) -> None:
     )
     assert session.download_bytes.called
     scripts = [c[0][3] for c in mock_run.call_args_list]
-    assert "06_setwireguard.sh" in scripts
+    assert "06_setvpservice.sh" in scripts
 
 
 @patch("commands.vpconfigure_provision._run_configure_script")
-def test_phases_06_wg_server_private_key_uploaded(mock_run: MagicMock) -> None:
+def test_phases_06_vp_server_private_key_uploaded(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.exec_command.return_value = (0, "", "")
     session.download_bytes.return_value = b"pub\n"
-    cfg = _cfg(auto_setup=False, set_wireguard=True, set_domain=False, domain=None)
+    cfg = _cfg(auto_setup=False, set_vpserver=True, set_domain=False, domain=None)
+    cfg.vp_service_type = "amneziawg"
     cfg.set_mtproxy = False
     cfg.set_vpmanage = False
-    cfg.wg_server_private_key = "  MYWGKEY  \n"
+    cfg.vp_server_private_key = "  MYWGKEY  \n"
     mock_run.return_value = "result:success; message:ok\n"
     run_vpconfigure_phases_05_to_08(
         session,
@@ -180,21 +181,22 @@ def test_phases_06_wg_server_private_key_uploaded(mock_run: MagicMock) -> None:
         artifact_persist=lambda _x: None,
     )
     session.upload_bytes.assert_called()
-    wg_extra = [c[0][5] for c in mock_run.call_args_list if c[0][3] == "06_setwireguard.sh"][0]
-    assert "--wg-server-private-key-file" in wg_extra
-    assert "/root/.vpconnect_wg_server_private_key" in wg_extra
+    wg_extra = [c[0][5] for c in mock_run.call_args_list if c[0][3] == "06_setvpservice.sh"][0]
+    assert "--vp-server-private-key-file" in wg_extra
+    assert "--vpservice-type amneziawg" in wg_extra
+    assert "/root/.vpconnect_vp_server_private_key" in wg_extra
     rm_calls = [a[0][0] for a in session.exec_command.call_args_list]
-    assert any("rm -f" in c and ".vpconnect_wg_server_private_key" in c for c in rm_calls)
+    assert any("rm -f" in c and ".vpconnect_vp_server_private_key" in c for c in rm_calls)
 
 
 @patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_06_passes_wg_address_when_set(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.return_value = b"pub\n"
-    cfg = _cfg(auto_setup=False, set_wireguard=True, set_domain=False, domain=None)
+    cfg = _cfg(auto_setup=False, set_vpserver=True, set_domain=False, domain=None)
     cfg.set_mtproxy = False
     cfg.set_vpmanage = False
-    cfg.wg_client_network = "10.9.0.1/24"
+    cfg.vp_client_network = "10.9.0.1/24"
     mock_run.return_value = "result:success; message:ok\n"
     run_vpconfigure_phases_05_to_08(
         session,
@@ -207,8 +209,8 @@ def test_phases_06_passes_wg_address_when_set(mock_run: MagicMock) -> None:
         access_state=AccessFileState(),
         artifact_persist=lambda _x: None,
     )
-    wg_extra = [c[0][5] for c in mock_run.call_args_list if c[0][3] == "06_setwireguard.sh"][0]
-    assert "--wg-address" in wg_extra
+    wg_extra = [c[0][5] for c in mock_run.call_args_list if c[0][3] == "06_setvpservice.sh"][0]
+    assert "--vp-address" in wg_extra
     assert "10.9.0.1/24" in wg_extra
 
 
@@ -216,7 +218,7 @@ def test_phases_06_passes_wg_address_when_set(mock_run: MagicMock) -> None:
 def test_phases_07_passes_mtproxy_secret(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.return_value = b"ab"
-    cfg = _cfg(auto_setup=False, set_wireguard=False, set_mtproxy=True, set_domain=False, domain=None)
+    cfg = _cfg(auto_setup=False, set_vpserver=False, set_mtproxy=True, set_domain=False, domain=None)
     cfg.mtproxy_secret = "dd0123456789abcdef0123456789abcdef"
     mock_run.return_value = "result:success; message:ok\n"
     run_vpconfigure_phases_05_to_08(
@@ -239,7 +241,7 @@ def test_phases_07_passes_mtproxy_secret(mock_run: MagicMock) -> None:
 def test_phases_07_mtproxy_uses_default_secret_path(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.return_value = b"deadbeef"
-    cfg = _cfg(auto_setup=False, set_wireguard=False, set_mtproxy=True, set_domain=False, domain=None)
+    cfg = _cfg(auto_setup=False, set_vpserver=False, set_mtproxy=True, set_domain=False, domain=None)
     mock_run.return_value = "result:success; message:ok\n"
     st = AccessFileState()
     run_vpconfigure_phases_05_to_08(
@@ -261,7 +263,7 @@ def test_phases_08_with_explicit_vpm_password(mock_run: MagicMock) -> None:
     session = MagicMock()
     cfg = _cfg(
         auto_setup=False,
-        set_wireguard=False,
+        set_vpserver=False,
         set_mtproxy=False,
         set_vpmanage=True,
         vpm_password="preset",
@@ -289,7 +291,7 @@ def test_phases_08_parses_password(mock_run: MagicMock) -> None:
     session = MagicMock()
     cfg = _cfg(
         auto_setup=False,
-        set_wireguard=False,
+        set_vpserver=False,
         set_mtproxy=False,
         set_vpmanage=True,
         vpm_password="",
@@ -314,7 +316,7 @@ def test_phases_08_parses_password(mock_run: MagicMock) -> None:
 @patch("commands.vpconfigure_provision._run_configure_script")
 def test_phases_none_enabled_persist_message(mock_run: MagicMock) -> None:
     session = MagicMock()
-    cfg = _cfg(auto_setup=False, set_wireguard=False, set_mtproxy=False, set_vpmanage=False)
+    cfg = _cfg(auto_setup=False, set_vpserver=False, set_mtproxy=False, set_vpmanage=False)
     cfg.set_domain = False
     cfg.domain = None
     cfg.use_public_ip = False
@@ -338,7 +340,7 @@ def test_phases_none_enabled_persist_message(mock_run: MagicMock) -> None:
 def test_phases_07_download_failure_logged(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.side_effect = OSError("read fail")
-    cfg = _cfg(auto_setup=False, set_wireguard=False, set_mtproxy=True, set_domain=False, domain=None)
+    cfg = _cfg(auto_setup=False, set_vpserver=False, set_mtproxy=True, set_domain=False, domain=None)
     mock_run.return_value = "result:success; message:ok\n"
     logs: list[str] = []
     run_vpconfigure_phases_05_to_08(
@@ -359,7 +361,7 @@ def test_phases_07_download_failure_logged(mock_run: MagicMock) -> None:
 def test_phases_06_download_failure_logged(mock_run: MagicMock) -> None:
     session = MagicMock()
     session.download_bytes.side_effect = OSError("nope")
-    cfg = _cfg(auto_setup=False, set_wireguard=True, set_domain=False, domain=None)
+    cfg = _cfg(auto_setup=False, set_vpserver=True, set_domain=False, domain=None)
     cfg.set_mtproxy = False
     cfg.set_vpmanage = False
     mock_run.return_value = "result:success; message:ok\n"
@@ -375,4 +377,4 @@ def test_phases_06_download_failure_logged(mock_run: MagicMock) -> None:
         access_state=AccessFileState(),
         artifact_persist=lambda _x: None,
     )
-    assert any("Не прочитан публичный ключ WG" in m for m in logs)
+    assert any("Не прочитан публичный ключ VP" in m for m in logs)

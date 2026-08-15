@@ -62,8 +62,8 @@ def required_listen_port_checks(config: ProvisionConfig) -> list[PortCheck]:
         if config.new_ssh_port != config.port:
             add("tcp", config.new_ssh_port, "новый SSH (sshd после шага 04)", "ssh")
 
-    if config.set_wireguard:
-        add("udp", config.wg_port, "WireGuard (UDP ListenPort)", "wireguard")
+    if config.set_vpserver:
+        add("udp", config.vp_port, "VP server (UDP ListenPort)", "vpserver")
 
     if config.set_mtproxy:
         add("tcp", config.mtproxy_port, "MTProxy для клиентов (-H)", "mtproxy")
@@ -192,8 +192,8 @@ for spec do
     owner=""
     if [ "$expected" = ssh ] && is_ssh_port "$port"; then
       owner="ssh"
-    elif [ "$expected" = wireguard ] && [ "$proto" = udp ] && is_wireguard_port "$port"; then
-      owner="wireguard"
+    elif [ "$expected" = vpserver ] && [ "$proto" = udp ] && is_wireguard_port "$port"; then
+      owner="vpserver"
     elif [ "$expected" = mtproxy ] && is_mtproxy_port "$port"; then
       owner="mtproxy"
     elif [ "$expected" = vpmanage ] && is_vpmanage_port "$port"; then
@@ -215,7 +215,7 @@ exit 0
 
 _PROCESS_MATCHERS: dict[str, tuple[re.Pattern[str], ...]] = {
     "ssh": (re.compile(r"\bsshd\b", re.IGNORECASE),),
-    "wireguard": (
+    "vpserver": (
         re.compile(r"\bwg-quick\b", re.IGNORECASE),
         re.compile(r"\bwireguard\b", re.IGNORECASE),
         re.compile(r"\bwg\b", re.IGNORECASE),

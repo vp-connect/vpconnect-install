@@ -14,7 +14,7 @@ def _valid_extended(**kw: object) -> ProvisionConfig:
         port=22,
         root_password="secret",
         auto_setup=False,
-        set_wireguard=False,
+        set_vpserver=False,
         set_mtproxy=False,
         set_vpmanage=False,
         vpconfigure_repo_url=d.VPCONFIGURE_REPO_URL_DEFAULT,
@@ -42,7 +42,7 @@ def test_validate_bad_new_ssh_port() -> None:
 
 
 def test_validate_bad_service_ports() -> None:
-    for field in ("wg_port", "mtproxy_port", "vpm_http_port"):
+    for field in ("vp_port", "mtproxy_port", "vpm_http_port"):
         cfg = _valid_extended(**{field: 0})
         with pytest.raises(ValueError, match=field):
             cfg.validate()
@@ -113,30 +113,30 @@ def test_apply_auto_setup_preserves_explicit_new_root_password() -> None:
     assert cfg.new_root_password == "fixed-pass"
 
 
-def test_validate_wg_client_network_normalizes_when_wireguard_on() -> None:
-    cfg = _valid_extended(set_wireguard=True, wg_client_network="10.0")
+def test_validate_vp_client_network_normalizes_when_wireguard_on() -> None:
+    cfg = _valid_extended(set_vpserver=True, vp_client_network="10.0")
     cfg.validate()
-    assert cfg.wg_client_network == "10.0.0.1/24"
+    assert cfg.vp_client_network == "10.0.0.1/24"
 
 
-def test_validate_wg_client_network_cleared_when_wireguard_off() -> None:
-    cfg = _valid_extended(set_wireguard=False, wg_client_network="10.0.0.0/24")
+def test_validate_vp_client_network_cleared_when_wireguard_off() -> None:
+    cfg = _valid_extended(set_vpserver=False, vp_client_network="10.0.0.0/24")
     cfg.validate()
-    assert cfg.wg_client_network == ""
+    assert cfg.vp_client_network == ""
 
 
-def test_validate_wg_client_network_rejects_garbage() -> None:
-    cfg = _valid_extended(set_wireguard=True, wg_client_network="not-an-ip")
-    with pytest.raises(ValueError, match="Сеть WG подключений"):
+def test_validate_vp_client_network_rejects_garbage() -> None:
+    cfg = _valid_extended(set_vpserver=True, vp_client_network="not-an-ip")
+    with pytest.raises(ValueError, match="Сеть VPN подключений"):
         cfg.validate()
 
 
-def test_validate_wg_client_network_none_pair_clears_field(monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = _valid_extended(set_wireguard=True, wg_client_network="10.1.0.0/24")
+def test_validate_vp_client_network_none_pair_clears_field(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = _valid_extended(set_vpserver=True, vp_client_network="10.1.0.0/24")
 
     def _fake_parse(_raw: str) -> tuple[str, str] | None:
         return None
 
-    monkeypatch.setattr("config.provision.parse_optional_wg_client_network", _fake_parse)
+    monkeypatch.setattr("config.provision.parse_optional_vp_client_network", _fake_parse)
     cfg.validate()
-    assert cfg.wg_client_network == ""
+    assert cfg.vp_client_network == ""

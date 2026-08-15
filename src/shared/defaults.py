@@ -1,7 +1,7 @@
 """
 Константы по умолчанию для клиента vpconnect-install.
 
-Порты, таймауты, пути на сервере для WireGuard, URL/ветка репозитория **remote** скриптов 00–03.
+Порты, таймауты, пути на сервере для VPN service, URL/ветка репозитория **remote** скриптов 00–03.
 Менять здесь предпочтительнее, чем размазывать литералы по коду.
 """
 
@@ -14,14 +14,14 @@ COMMAND_TIMEOUT = 3600
 REBOOT_WAIT_TIMEOUT = 300
 SSH_POLL_INTERVAL = 5
 
-# WireGuard / MTProxy / VPManage default ports
-WG_PORT_DEFAULT = 443
+# VP server / MTProxy / VPManage default ports
+VP_PORT_DEFAULT = 443
 MTPROXY_PORT_DEFAULT = 25
 VPM_HTTP_PORT_DEFAULT = 80
 
-# Server paths for client artifacts (WireGuard)
-WG_CLIENT_CERT_PATH_DEFAULT = "/usr/wireguard/client_cert"
-WG_CLIENT_CONFIG_PATH_DEFAULT = "/usr/wireguard/client_config"
+# Server paths for client artifacts (VP server)
+VP_CLIENT_CERT_PATH_DEFAULT = "/usr/vpserver/client_cert"
+VP_CLIENT_CONFIG_PATH_DEFAULT = "/usr/vpserver/client_config"
 
 # Generated secrets length (approx)
 SECRET_TOKEN_BYTES = 16

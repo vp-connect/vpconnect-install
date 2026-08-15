@@ -7,5 +7,5 @@
 
 **Запрещено:** ``application``, ``server``, ``commands``, ``config``, ``cli``, ``gui``.
 
-**Публичный API:** :mod:`core.wg_client_network`, :mod:`core.github_repo`.
+**Публичный API:** :mod:`core.vp_client_network`, :mod:`core.github_repo`.
 """

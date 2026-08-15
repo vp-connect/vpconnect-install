@@ -113,7 +113,7 @@ def _need_run_05(config: ProvisionConfig) -> bool:
         return True
     if config.use_public_ip:
         return True
-    if config.set_wireguard or config.set_mtproxy or config.set_vpmanage:
+    if config.set_vpserver or config.set_mtproxy or config.set_vpmanage:
         return True
     return False
 
@@ -225,7 +225,7 @@ def _run_phase_05_setdomain(
     return True
 
 
-def _run_phase_06_wireguard(
+def _run_phase_06_vpservice(
     log: LogFn,
     session: SSHSession,
     configure_dir: str,
@@ -236,45 +236,46 @@ def _run_phase_06_wireguard(
     access_state: AccessFileState,
     artifact_persist: Callable[[str], None],
 ) -> bool:
-    if not config.set_wireguard:
+    if not config.set_vpserver:
         return False
-    cert = config.wg_client_cert_path.strip() or d.WG_CLIENT_CERT_PATH_DEFAULT
-    cdir = config.wg_client_config_path.strip() or d.WG_CLIENT_CONFIG_PATH_DEFAULT
+    cert = config.vp_client_cert_path.strip() or d.VP_CLIENT_CERT_PATH_DEFAULT
+    cdir = config.vp_client_config_path.strip() or d.VP_CLIENT_CONFIG_PATH_DEFAULT
     extra = (
-        f" --wg-port {int(config.wg_port)}"
-        f" --wg-client-cert-path {shlex.quote(cert)}"
-        f" --wg-client-config-path {shlex.quote(cdir)}"
+        f" --vp-port {int(config.vp_port)}"
+        f" --vp-client-cert-path {shlex.quote(cert)}"
+        f" --vp-client-config-path {shlex.quote(cdir)}"
         " --persist"
     )
-    wgn = (config.wg_client_network or "").strip()
+    wgn = (config.vp_client_network or "").strip()
     if wgn:
-        extra += f" --wg-address {shlex.quote(wgn)}"
-    wg_priv_remote = ""
-    wgk = (config.wg_server_private_key or "").strip()
-    if wgk:
-        wg_priv_remote = f"{remote_home.rstrip('/')}/.vpconnect_wg_server_private_key"
-        session.upload_bytes(wg_priv_remote, (wgk.splitlines()[0].strip() + "\n").encode("utf-8"))
-        _chmod_remote(log, session, wg_priv_remote, 30)
-        extra += f" --wg-server-private-key-file {shlex.quote(wg_priv_remote)}"
+        extra += f" --vp-address {shlex.quote(wgn)}"
+    vp_priv_remote = ""
+    vpk = (config.vp_server_private_key or "").strip()
+    if vpk:
+        vp_priv_remote = f"{remote_home.rstrip('/')}/.vpconnect_vp_server_private_key"
+        session.upload_bytes(vp_priv_remote, (vpk.splitlines()[0].strip() + "\n").encode("utf-8"))
+        _chmod_remote(log, session, vp_priv_remote, 30)
+        extra += f" --vp-server-private-key-file {shlex.quote(vp_priv_remote)}"
+    extra += f" --vpservice-type {shlex.quote(config.vp_service_type)}"
     _run_configure_script(
         log,
         session,
         configure_dir,
-        "06_setwireguard.sh",
+        "06_setvpservice.sh",
         os_branch,
         extra,
         tmo,
         blank_before=True,
     )
-    if wg_priv_remote:
-        session.exec_command(f"rm -f {shlex.quote(wg_priv_remote)}", timeout=30)
+    if vp_priv_remote:
+        session.exec_command(f"rm -f {shlex.quote(vp_priv_remote)}", timeout=30)
     pub_remote = f"{cert.rstrip('/')}/wg_server_public.key"
     try:
         raw = session.download_bytes(pub_remote)
-        access_state.wireguard_public_key = raw.decode("utf-8", errors="replace").strip()
+        access_state.vpserver_public_key = raw.decode("utf-8", errors="replace").strip()
     except Exception as ex:
-        log(f"[vpconnect-configure] Не прочитан публичный ключ WG ({pub_remote}): {ex}")
-    artifact_persist("после 06_setwireguard.sh")
+        log(f"[vpconnect-configure] Не прочитан публичный ключ VP ({pub_remote}): {ex}")
+    artifact_persist("после 06_setvpservice.sh")
     return True
 
 
@@ -361,12 +362,12 @@ def run_vpconfigure_phases_05_to_08(
     """05–08 из configure_dir.
 
     Перед каждым скриптом — пустая строка в логе; артефакты сохраняются после каждого шага.
-    ``remote_home`` — домашний каталог root на сервере (временный файл для приватного ключа WG).
+    ``remote_home`` — домашний каталог root на сервере (временный файл для приватного ключа VP).
     """
     tmo = min(timeout, 3600)
     ran_any_step = False
     ran_any_step |= _run_phase_05_setdomain(log, session, configure_dir, os_branch, config, tmo, artifact_persist)
-    ran_any_step |= _run_phase_06_wireguard(
+    ran_any_step |= _run_phase_06_vpservice(
         log,
         session,
         configure_dir,

@@ -198,20 +198,20 @@ def test_assert_remote_listen_ports_free_missing_tool_raises() -> None:
         assert_remote_listen_ports_free(session, cfg, lambda _m: None, 60)
 
 
-def test_assert_remote_listen_ports_free_wireguard_owner_marker_allows_reinstall() -> None:
+def test_assert_remote_listen_ports_free_vpserver_owner_marker_allows_reinstall() -> None:
     cfg = ProvisionConfig(
         host="h",
         port=22,
         root_password="x",
         auto_setup=False,
-        set_wireguard=True,
-        wg_port=4443,
+        set_vpserver=True,
+        vp_port=4443,
         vpconfigure_repo_url=d.VPCONFIGURE_REPO_URL_DEFAULT,
     )
     session = MagicMock()
     session.exec_command.return_value = (
         1,
-        "BUSY:udp:4443|OWNER:wireguard|udp UNCONN 0 0 0.0.0.0:4443 0.0.0.0:*;\n",
+        "BUSY:udp:4443|OWNER:vpserver|udp UNCONN 0 0 0.0.0.0:4443 0.0.0.0:*;\n",
         "",
     )
     logs: list[str] = []

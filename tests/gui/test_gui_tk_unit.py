@@ -74,12 +74,13 @@ def test_build_config_auto_vs_extended() -> None:
         set_domain=False,
         domain="",
         vpconfigure_repo_url=d.VPCONFIGURE_REPO_URL_DEFAULT,
-        set_wg=False,
-        wg_port=1,
-        wg_client_network="",
-        wg_cert="",
-        wg_conf="",
-        wg_server_private_key="",
+        set_vpserver=False,
+        vp_service_type="wireguard",
+        vp_port=1,
+        vp_client_network="",
+        vp_cert="",
+        vp_conf="",
+        vp_server_private_key="",
         set_mt=False,
         mt_port=1,
         mtproxy_secret="",
@@ -87,7 +88,7 @@ def test_build_config_auto_vs_extended() -> None:
         vpm_http=1,
         vpm_pw="",
     )
-    assert cfg_a.set_wireguard is True
+    assert cfg_a.set_vpserver is True
     cfg_m = _build_config(
         auto_setup=False,
         host="h",
@@ -103,12 +104,13 @@ def test_build_config_auto_vs_extended() -> None:
         set_domain=False,
         domain="",
         vpconfigure_repo_url="",
-        set_wg=True,
-        wg_port=443,
-        wg_client_network="",
-        wg_cert="",
-        wg_conf="",
-        wg_server_private_key="",
+        set_vpserver=True,
+        vp_service_type="amneziawg",
+        vp_port=443,
+        vp_client_network="",
+        vp_cert="",
+        vp_conf="",
+        vp_server_private_key="",
         set_mt=False,
         mt_port=25,
         mtproxy_secret="",
@@ -116,7 +118,8 @@ def test_build_config_auto_vs_extended() -> None:
         vpm_http=80,
         vpm_pw="",
     )
-    assert cfg_m.set_wireguard is True
+    assert cfg_m.set_vpserver is True
+    assert cfg_m.vp_service_type == "amneziawg"
     assert cfg_m.set_mtproxy is False
 
 

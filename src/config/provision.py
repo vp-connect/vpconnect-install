@@ -12,7 +12,7 @@ from pathlib import Path
 
 from shared import defaults as d
 from core.github_repo import parse_github_repo_url
-from core.wg_client_network import parse_optional_wg_client_network
+from core.vp_client_network import parse_optional_vp_client_network
 
 
 def _port_ok(p: int) -> bool:
@@ -50,14 +50,15 @@ class ProvisionConfig:
     # CLI: detect public IP on server (like former --request-domain) when no domain
     use_public_ip: bool = False
 
-    set_wireguard: bool = False
-    wg_port: int = d.WG_PORT_DEFAULT
-    wg_client_cert_path: str = d.WG_CLIENT_CERT_PATH_DEFAULT
-    wg_client_config_path: str = d.WG_CLIENT_CONFIG_PATH_DEFAULT
-    # Одна строка (wg genkey); при непустом значении загружается на сервер и передаётся в 06_setwireguard.sh
-    wg_server_private_key: str = ""
+    set_vpserver: bool = False
+    vp_service_type: str = "wireguard"
+    vp_port: int = d.VP_PORT_DEFAULT
+    vp_client_cert_path: str = d.VP_CLIENT_CERT_PATH_DEFAULT
+    vp_client_config_path: str = d.VP_CLIENT_CONFIG_PATH_DEFAULT
+    # Одна строка (wg genkey); при непустом значении загружается на сервер и передаётся в 06_setvpservice.sh
+    vp_server_private_key: str = ""
     # Сеть клиентских адресов WG: после validate — нормализованный ``x.y.z.1/24`` или пусто (умолчание 06)
-    wg_client_network: str = ""
+    vp_client_network: str = ""
 
     set_mtproxy: bool = False
     mtproxy_port: int = d.MTPROXY_PORT_DEFAULT
@@ -102,7 +103,7 @@ class ProvisionConfig:
         _validate_ssh_credentials(self)
         _validate_vpconfigure_repo(self)
         _validate_domain_manual(self)
-        _validate_wg_client_network(self)
+        _validate_vp_client_network(self)
 
 
 def _validate_required_ports(cfg: ProvisionConfig) -> None:
@@ -114,12 +115,16 @@ def _validate_required_ports(cfg: ProvisionConfig) -> None:
     if cfg.new_ssh_port is not None and not _port_ok(cfg.new_ssh_port):
         raise ValueError(f"invalid new_ssh_port: {cfg.new_ssh_port}")
     for name, p in (
-        ("wg_port", cfg.wg_port),
+        ("vp_port", cfg.vp_port),
         ("mtproxy_port", cfg.mtproxy_port),
         ("vpm_http_port", cfg.vpm_http_port),
     ):
         if not _port_ok(p):
             raise ValueError(f"invalid {name}: {p}")
+    svc = (cfg.vp_service_type or "").strip().lower()
+    if svc not in {"wireguard", "amneziawg"}:
+        raise ValueError(f"invalid vp_service_type: {cfg.vp_service_type!r}")
+    cfg.vp_service_type = svc
 
 
 def _validate_ssh_credentials(cfg: ProvisionConfig) -> None:
@@ -149,25 +154,25 @@ def _validate_domain_manual(cfg: ProvisionConfig) -> None:
         raise ValueError("domain must be non-empty when specified")
 
 
-def _validate_wg_client_network(cfg: ProvisionConfig) -> None:
-    """Нормализовать «Сеть WG подключений» в ``x.y.z.1/24`` или очистить при пустом вводе."""
-    if not cfg.set_wireguard:
-        cfg.wg_client_network = ""
+def _validate_vp_client_network(cfg: ProvisionConfig) -> None:
+    """Нормализовать сеть VPN-подключений в ``x.y.z.1/24`` или очистить при пустом вводе."""
+    if not cfg.set_vpserver:
+        cfg.vp_client_network = ""
         return
-    raw = (cfg.wg_client_network or "").strip()
+    raw = (cfg.vp_client_network or "").strip()
     if not raw:
-        cfg.wg_client_network = ""
+        cfg.vp_client_network = ""
         return
     try:
-        pair = parse_optional_wg_client_network(raw)
+        pair = parse_optional_vp_client_network(raw)
     except ValueError as e:
         raise ValueError(
-            "Сеть WG подключений: неверный формат. Укажите пусто, CIDR (например 10.0.0.0/24), "
+            "Сеть VPN подключений: неверный формат. Укажите пусто, CIDR (например 10.0.0.0/24), "
             "адрес сети или сервера, либо не менее двух октетов (например 10.8). "
             f"Исправьте ввод: {e}"
         ) from e
     if pair is None:
-        cfg.wg_client_network = ""
+        cfg.vp_client_network = ""
         return
     addr, _net = pair
-    cfg.wg_client_network = addr
+    cfg.vp_client_network = addr

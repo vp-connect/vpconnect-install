@@ -71,7 +71,7 @@ def test_need_run_05_matrix() -> None:
     assert _need_run_05(_pc(auto_setup=False, set_domain=True)) is True
     assert _need_run_05(_pc(auto_setup=False, domain="d.example")) is True
     assert _need_run_05(_pc(auto_setup=False, use_public_ip=True)) is True
-    assert _need_run_05(_pc(auto_setup=False, set_wireguard=True)) is True
+    assert _need_run_05(_pc(auto_setup=False, set_vpserver=True)) is True
     assert _need_run_05(_pc(auto_setup=False, set_mtproxy=True)) is True
     assert _need_run_05(_pc(auto_setup=False, set_vpmanage=True)) is True
     assert _need_run_05(_pc(auto_setup=False)) is False

@@ -43,7 +43,7 @@ class AccessFileState:
     """
 
     mtproxy_secret: str | None = None
-    wireguard_public_key: str | None = None
+    vpserver_public_key: str | None = None
     last_saved_after: str = ""
 
 
@@ -168,13 +168,13 @@ def _access_header_lines(bundle: ArtifactBundle, config: ProvisionConfig, target
     return lines
 
 
-def _access_wireguard_lines(config: ProvisionConfig) -> list[str]:
-    if not config.set_wireguard:
+def _access_vpserver_lines(config: ProvisionConfig) -> list[str]:
+    if not config.set_vpserver:
         return []
-    lines = [f"WireGuard UDP port: {config.wg_port}"]
-    wgn = (config.wg_client_network or "").strip()
+    lines = [f"VP server UDP port: {config.vp_port}"]
+    wgn = (config.vp_client_network or "").strip()
     if wgn:
-        lines.append(f"WireGuard server address (normalized): {wgn}")
+        lines.append(f"VP server address (normalized): {wgn}")
     return lines
 
 
@@ -187,10 +187,10 @@ def _access_mtproxy_lines(config: ProvisionConfig, state: AccessFileState) -> li
     return lines
 
 
-def _access_wg_public_key_lines(state: AccessFileState) -> list[str]:
-    if not state.wireguard_public_key:
+def _access_vp_public_key_lines(state: AccessFileState) -> list[str]:
+    if not state.vpserver_public_key:
         return []
-    return ["", "WireGuard server public key:", state.wireguard_public_key.strip(), ""]
+    return ["", "VP server public key:", state.vpserver_public_key.strip(), ""]
 
 
 def _access_vpmanage_lines(config: ProvisionConfig, target: str) -> list[str]:
@@ -224,9 +224,9 @@ def write_access_file(
     ssh_port = config.new_ssh_port if config.new_ssh_port is not None else config.port
     lines: list[str] = []
     lines.extend(_access_header_lines(bundle, config, target, ssh_port))
-    lines.extend(_access_wireguard_lines(config))
+    lines.extend(_access_vpserver_lines(config))
     lines.extend(_access_mtproxy_lines(config, state))
-    lines.extend(_access_wg_public_key_lines(state))
+    lines.extend(_access_vp_public_key_lines(state))
     lines.extend(_access_vpmanage_lines(config, target))
     lines.extend(_access_footer_lines(config, state))
     path = bundle.root / "ACCESS.txt"

@@ -159,6 +159,19 @@ WIREGUARD_SERVER_PRIVATE_KEY_REUSE = """
 
 Если указать прежний ключ при переустановке, клиенты с теми же конфигами продолжат подключаться"""
 
+# Новые нейтральные алиасы для VPN server секции в GUI.
+VPSERVER_ENABLE = WIREGUARD_ENABLE
+VPSERVER_UDP_PORT = WIREGUARD_UDP_PORT
+VPSERVER_CLIENT_NETWORK = WIREGUARD_CLIENT_NETWORK
+VPSERVER_CLIENT_CERT_PATH = WIREGUARD_CLIENT_CERT_PATH
+VPSERVER_CLIENT_CONFIG_PATH = WIREGUARD_CLIENT_CONFIG_PATH
+VPSERVER_SERVER_PRIVATE_KEY_REUSE = WIREGUARD_SERVER_PRIVATE_KEY_REUSE
+VPSERVICE_TYPE = """
+Выбор типа VPN-сервиса для шага установки.
+
+WireGuard — базовый режим.
+AmneziaWG — альтернативный режим с тем же внешним контрактом vpserver."""
+
 #                                                                   #
 MTPROXY_ENABLE = """
 Установить MTProxy (прокси для Telegram) на сервере

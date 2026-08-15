@@ -17,7 +17,7 @@ def test_config_from_args_reads_root_password_file(tmp_path: Path) -> None:
     assert cfg.root_password == "from-file"
 
 
-def test_config_from_args_wg_server_private_key_file(tmp_path: Path) -> None:
+def test_config_from_args_vp_server_private_key_file(tmp_path: Path) -> None:
     keyf = tmp_path / "wg.key"
     keyf.write_text("  PRIVATEKEYLINE  \n", encoding="utf-8")
     p = build_arg_parser()
@@ -28,15 +28,15 @@ def test_config_from_args_wg_server_private_key_file(tmp_path: Path) -> None:
             "--root-password",
             "x",
             "--no-auto-setup",
-            "--no-set-wireguard",
+            "--no-set-vpserver",
             "--no-set-mtproxy",
             "--no-set-vpmanage",
-            "--wg-server-private-key-file",
+            "--vp-server-private-key-file",
             str(keyf),
         ]
     )
     cfg = config_from_args(ns)
-    assert cfg.wg_server_private_key == "PRIVATEKEYLINE"
+    assert cfg.vp_server_private_key == "PRIVATEKEYLINE"
 
 
 def test_config_from_args_new_ssh_public_key_file(tmp_path: Path) -> None:
@@ -50,7 +50,7 @@ def test_config_from_args_new_ssh_public_key_file(tmp_path: Path) -> None:
             "--root-password",
             "x",
             "--no-auto-setup",
-            "--no-set-wireguard",
+            "--no-set-vpserver",
             "--no-set-mtproxy",
             "--no-set-vpmanage",
             "--new-ssh-public-key-file",
@@ -77,13 +77,13 @@ def test_config_from_args_feature_flags_no_auto_explicit_wireguard_only() -> Non
             "--root-password",
             "x",
             "--no-auto-setup",
-            "--set-wireguard",
+            "--set-vpserver",
             "--no-set-mtproxy",
             "--no-set-vpmanage",
         ]
     )
     cfg = config_from_args(ns)
-    assert cfg.set_wireguard is True
+    assert cfg.set_vpserver is True
     assert cfg.set_mtproxy is False
     assert cfg.set_vpmanage is False
 
@@ -95,7 +95,7 @@ def test_main_returns_0_on_success() -> None:
         "--root-password",
         "x",
         "--no-auto-setup",
-        "--no-set-wireguard",
+        "--no-set-vpserver",
         "--no-set-mtproxy",
         "--no-set-vpmanage",
     ]
@@ -112,7 +112,7 @@ def test_main_returns_1_on_run_error(tmp_path: Path) -> None:
         "--root-password",
         "x",
         "--no-auto-setup",
-        "--no-set-wireguard",
+        "--no-set-vpserver",
         "--no-set-mtproxy",
         "--no-set-vpmanage",
         "--artifacts-dir",
@@ -138,7 +138,7 @@ def test_config_artifacts_dir_passed_via_main_mock(tmp_path: Path) -> None:
         "--root-password",
         "x",
         "--no-auto-setup",
-        "--no-set-wireguard",
+        "--no-set-vpserver",
         "--no-set-mtproxy",
         "--no-set-vpmanage",
         "--artifacts-dir",

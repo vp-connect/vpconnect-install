@@ -15,7 +15,7 @@ def test_config_auto_setup_defaults() -> None:
     )
     cfg = config_from_args(ns)
     assert cfg.auto_setup is True
-    assert cfg.set_wireguard is True
+    assert cfg.set_vpserver is True
     assert cfg.set_mtproxy is True
     assert cfg.set_vpmanage is True
 
@@ -29,14 +29,14 @@ def test_config_no_auto_flags_off() -> None:
             "--root-password",
             "x",
             "--no-auto-setup",
-            "--no-set-wireguard",
+            "--no-set-vpserver",
             "--no-set-mtproxy",
             "--no-set-vpmanage",
         ]
     )
     cfg = config_from_args(ns)
     assert cfg.auto_setup is False
-    assert cfg.set_wireguard is False
+    assert cfg.set_vpserver is False
     assert cfg.set_mtproxy is False
     assert cfg.set_vpmanage is False
 
@@ -50,7 +50,7 @@ def test_new_ssh_port_optional() -> None:
             "--root-password",
             "x",
             "--no-auto-setup",
-            "--no-set-wireguard",
+            "--no-set-vpserver",
             "--no-set-mtproxy",
             "--no-set-vpmanage",
         ]

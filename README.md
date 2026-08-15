@@ -79,7 +79,7 @@ python -m vpconnect_install --help
 
 **`--auto-setup` (по умолчанию):** WireGuard + MTProxy + VPManage, новый пароль root, SSH-порт **2222** (если не задан), публичный IP на сервере для URL при отсутствии явного домена, генерация `VPM_PASSWORD` при пустом значении.
 
-**`--no-auto-setup`:** явно `--set-wireguard` / `--set-mtproxy` / `--set-vpmanage`. Без `--new-ssh-port` порт SSH не меняется.  
+**`--no-auto-setup`:** явно `--set-vpserver` / `--set-mtproxy` / `--set-vpmanage`. Без `--new-ssh-port` порт SSH не меняется.  
 Файервол на сервере включается опционально флагом **`--enable-firewall`** (шаг `04_setsystemaccess.sh`).
 
 **Эффективный хост для URL (домен / IP):**
@@ -90,7 +90,7 @@ python -m vpconnect_install --help
 
 **Репозиторий vpconnect-configure:** `--vpconfigure-repo-url` (по умолчанию в `defaults.py`).
 
-**Переустановка без смены ключей для клиентов:** опционально **`--wg-server-private-key-file`** (одна строка, вывод `wg genkey`) — в **`06_setwireguard.sh`** подставляется существующий приватный ключ сервера; **`--mtproxy-secret`** или **`--mtproxy-secret-file`** / **`MTPROXY_SECRET`** — тот же секрет, что в ссылке **`tg://proxy`** (32 hex или `dd` + 32 hex), передаётся в **`07_setmtproxy.sh`**.
+**Переустановка без смены ключей для клиентов:** опционально **`--vp-server-private-key-file`** (одна строка, вывод `wg genkey`) — в **`06_setvpservice.sh`** подставляется существующий приватный ключ сервера; **`--mtproxy-secret`** или **`--mtproxy-secret-file`** / **`MTPROXY_SECRET`** — тот же секрет, что в ссылке **`tg://proxy`** (32 hex или `dd` + 32 hex), передаётся в **`07_setmtproxy.sh`**.
 
 Остальные флаги сценариев на сервере — в [README vpconnect-configure](https://github.com/vp-connect/vpconnect-configure/blob/main/README.md).
 
@@ -99,7 +99,7 @@ python -m vpconnect_install --help
 ```sh
 python -m vpconnect_install --host 203.0.113.10 --no-auto-setup \
   --root-password-file /secure/root.txt \
-  --set-wireguard --set-mtproxy --set-vpmanage \
+  --set-vpserver --set-mtproxy --set-vpmanage \
   --new-ssh-port 2222 --new-root-password-file /secure/new.txt \
   --domain example.com
 ```

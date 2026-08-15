@@ -24,7 +24,7 @@ from gui.gui_clipboard import (
 from gui.gui_extended_hint import bind_extended_hint
 from application.outputs import open_directory_in_file_manager
 from application.runner import run
-from core.wg_client_network import DEFAULT_WG_ADDRESS_CIDR, normalize_wg_client_network
+from core.vp_client_network import DEFAULT_VP_ADDRESS_CIDR, normalize_vp_client_network
 
 # Высота лога в строках в расширенном режиме; в упрощённом лог растягивается по вертикали.
 _LOG_LINES_COMPACT = 6
@@ -99,12 +99,13 @@ def _build_config(
     set_domain: bool,
     domain: str,
     vpconfigure_repo_url: str,
-    set_wg: bool,
-    wg_port: int,
-    wg_client_network: str,
-    wg_cert: str,
-    wg_conf: str,
-    wg_server_private_key: str,
+    set_vpserver: bool,
+    vp_service_type: str,
+    vp_port: int,
+    vp_client_network: str,
+    vp_cert: str,
+    vp_conf: str,
+    vp_server_private_key: str,
     set_mt: bool,
     mt_port: int,
     mtproxy_secret: str,
@@ -132,12 +133,13 @@ def _build_config(
         set_domain=set_domain,
         domain=dom,
         vpconfigure_repo_url=vpconfigure_repo_url.strip() or d.VPCONFIGURE_REPO_URL_DEFAULT,
-        set_wireguard=set_wg if not auto_setup else True,
-        wg_port=wg_port,
-        wg_client_network=wg_client_network.strip(),
-        wg_client_cert_path=wg_cert.strip() or d.WG_CLIENT_CERT_PATH_DEFAULT,
-        wg_client_config_path=wg_conf.strip() or d.WG_CLIENT_CONFIG_PATH_DEFAULT,
-        wg_server_private_key=wg_server_private_key.strip(),
+        set_vpserver=set_vpserver if not auto_setup else True,
+        vp_service_type=vp_service_type,
+        vp_port=vp_port,
+        vp_client_network=vp_client_network.strip(),
+        vp_client_cert_path=vp_cert.strip() or d.VP_CLIENT_CERT_PATH_DEFAULT,
+        vp_client_config_path=vp_conf.strip() or d.VP_CLIENT_CONFIG_PATH_DEFAULT,
+        vp_server_private_key=vp_server_private_key.strip(),
         set_mtproxy=set_mt if not auto_setup else True,
         mtproxy_port=mt_port,
         mtproxy_secret=mtproxy_secret.strip(),
@@ -313,44 +315,56 @@ class ProvisionerGUI:
         self._dom_widgets = [self.domain_ent]
         ar += 1
 
-        self.set_wg_var = tk.BooleanVar(value=True)
-        wgf = ttk.LabelFrame(af, text=gc.CAP_SECTION_WIREGUARD, padding=6)
+        self.set_vpserver_var = tk.BooleanVar(value=True)
+        self.vp_service_type_var = tk.StringVar(value="wireguard")
+        wgf = ttk.LabelFrame(af, text=gc.CAP_SECTION_VPSERVER, padding=6)
         wgf.grid(row=ar, column=0, columnspan=2, sticky="ew", pady=4)
         wgf.columnconfigure(1, weight=1)
-        wg_on = ttk.Checkbutton(wgf, text=gc.CAP_INSTALL, variable=self.set_wg_var, command=self._toggle_wg)
+        wg_on = ttk.Checkbutton(wgf, text=gc.CAP_INSTALL, variable=self.set_vpserver_var, command=self._toggle_vpserver)
         wg_on.grid(row=0, column=0, sticky="w")
-        bind_extended_hint(self.root, [wg_on], gh.WIREGUARD_ENABLE)
-        wgp_lbl = ttk.Label(wgf, text=gc.CAP_WG_UDP_PORT)
+        bind_extended_hint(self.root, [wg_on], gh.VPSERVER_ENABLE)
+        svc_lbl = ttk.Label(wgf, text=gc.CAP_VPSERVICE_TYPE)
+        svc_lbl.grid(row=0, column=1, sticky="e", padx=(8, 4))
+        svc_wireguard = ttk.Radiobutton(
+            wgf, text=gc.CAP_VPSERVICE_WIREGUARD, variable=self.vp_service_type_var, value="wireguard"
+        )
+        svc_wireguard.grid(row=0, column=2, sticky="w")
+        svc_amnezia = ttk.Radiobutton(
+            wgf, text=gc.CAP_VPSERVICE_AMNEZIAWG, variable=self.vp_service_type_var, value="amneziawg"
+        )
+        svc_amnezia.grid(row=0, column=3, sticky="w", padx=(4, 0))
+        bind_extended_hint(self.root, [svc_lbl, svc_wireguard, svc_amnezia], gh.VPSERVICE_TYPE)
+        wgp_lbl = ttk.Label(wgf, text=gc.CAP_VP_UDP_PORT)
         wgp_lbl.grid(row=1, column=0, sticky="e")
-        self.wg_port = ttk.Entry(wgf, width=8)
-        self.wg_port.insert(0, str(d.WG_PORT_DEFAULT))
-        self.wg_port.grid(row=1, column=1, sticky="w", padx=4)
-        bind_extended_hint(self.root, [wgp_lbl, self.wg_port], gh.WIREGUARD_UDP_PORT)
-        wgn_lbl = ttk.Label(wgf, text=gc.CAP_WG_CLIENT_NETWORK)
+        self.vp_port = ttk.Entry(wgf, width=8)
+        self.vp_port.insert(0, str(d.VP_PORT_DEFAULT))
+        self.vp_port.grid(row=1, column=1, sticky="w", padx=4)
+        bind_extended_hint(self.root, [wgp_lbl, self.vp_port], gh.VPSERVER_UDP_PORT)
+        wgn_lbl = ttk.Label(wgf, text=gc.CAP_VP_CLIENT_NETWORK)
         wgn_lbl.grid(row=2, column=0, sticky="e")
         self.wg_net = ttk.Entry(wgf, width=40)
-        self.wg_net.insert(0, DEFAULT_WG_ADDRESS_CIDR)
+        self.wg_net.insert(0, DEFAULT_VP_ADDRESS_CIDR)
         self.wg_net.grid(row=2, column=1, sticky="ew", padx=4)
-        bind_extended_hint(self.root, [wgn_lbl, self.wg_net], gh.WIREGUARD_CLIENT_NETWORK)
+        bind_extended_hint(self.root, [wgn_lbl, self.wg_net], gh.VPSERVER_CLIENT_NETWORK)
         self.wg_net.bind("<FocusOut>", self._wg_net_silent_normalize_on_focus_out)
-        wgc_lbl = ttk.Label(wgf, text=gc.CAP_WG_CLIENT_CERT)
+        wgc_lbl = ttk.Label(wgf, text=gc.CAP_VP_CLIENT_CERT)
         wgc_lbl.grid(row=3, column=0, sticky="e")
         self.wg_cert = ttk.Entry(wgf, width=40)
-        self.wg_cert.insert(0, d.WG_CLIENT_CERT_PATH_DEFAULT)
+        self.wg_cert.insert(0, d.VP_CLIENT_CERT_PATH_DEFAULT)
         self.wg_cert.grid(row=3, column=1, sticky="ew", padx=4)
-        bind_extended_hint(self.root, [wgc_lbl, self.wg_cert], gh.WIREGUARD_CLIENT_CERT_PATH)
-        wgf_lbl = ttk.Label(wgf, text=gc.CAP_WG_CLIENT_CONFIG)
+        bind_extended_hint(self.root, [wgc_lbl, self.wg_cert], gh.VPSERVER_CLIENT_CERT_PATH)
+        wgf_lbl = ttk.Label(wgf, text=gc.CAP_VP_CLIENT_CONFIG)
         wgf_lbl.grid(row=4, column=0, sticky="e")
         self.wg_conf = ttk.Entry(wgf, width=40)
-        self.wg_conf.insert(0, d.WG_CLIENT_CONFIG_PATH_DEFAULT)
+        self.wg_conf.insert(0, d.VP_CLIENT_CONFIG_PATH_DEFAULT)
         self.wg_conf.grid(row=4, column=1, sticky="ew", padx=4)
-        bind_extended_hint(self.root, [wgf_lbl, self.wg_conf], gh.WIREGUARD_CLIENT_CONFIG_PATH)
-        wgs_lbl = ttk.Label(wgf, text=gc.CAP_WG_SERVER_PRIVATE_KEY)
+        bind_extended_hint(self.root, [wgf_lbl, self.wg_conf], gh.VPSERVER_CLIENT_CONFIG_PATH)
+        wgs_lbl = ttk.Label(wgf, text=gc.CAP_VP_SERVER_PRIVATE_KEY)
         wgs_lbl.grid(row=5, column=0, sticky="ne")
         self.wg_server_priv = ttk.Entry(wgf, width=40)
         self.wg_server_priv.grid(row=5, column=1, sticky="ew", padx=4)
-        bind_extended_hint(self.root, [wgs_lbl, self.wg_server_priv], gh.WIREGUARD_SERVER_PRIVATE_KEY_REUSE)
-        self._wg_widgets = [self.wg_port, self.wg_net, self.wg_cert, self.wg_conf, self.wg_server_priv]
+        bind_extended_hint(self.root, [wgs_lbl, self.wg_server_priv], gh.VPSERVER_SERVER_PRIVATE_KEY_REUSE)
+        self._wg_widgets = [self.vp_port, self.wg_net, self.wg_cert, self.wg_conf, self.wg_server_priv]
         ar += 1
 
         self.set_mt_var = tk.BooleanVar(value=True)
@@ -460,20 +474,20 @@ class ProvisionerGUI:
         st = "!disabled" if on else "disabled"
         self._state_widgets(self._dom_widgets, st)
 
-    def _toggle_wg(self) -> None:
-        st = "disabled" if not self.set_wg_var.get() else "!disabled"
+    def _toggle_vpserver(self) -> None:
+        st = "disabled" if not self.set_vpserver_var.get() else "!disabled"
         self._state_widgets(self._wg_widgets, st)
 
     def _wg_net_silent_normalize_on_focus_out(self, _event: object | None = None) -> None:
         """Тихая нормализация до ``x.y.z.1/24`` при потере фокуса;
         при ошибке — без диалогов (валидация только на Start)."""
-        if not self.set_wg_var.get():
+        if not self.set_vpserver_var.get():
             return
         raw = self.wg_net.get().strip()
         if not raw:
             return
         try:
-            addr, _net = normalize_wg_client_network(raw)
+            addr, _net = normalize_vp_client_network(raw)
         except ValueError:
             return
         self.wg_net.delete(0, "end")
@@ -515,7 +529,7 @@ class ProvisionerGUI:
             self.advanced_frame.grid()
             self._toggle_nc()
             self._toggle_dom()
-            self._toggle_wg()
+            self._toggle_vpserver()
             self._toggle_mt()
             self._toggle_vpm()
             self.root.minsize(620, 640)
@@ -578,12 +592,13 @@ class ProvisionerGUI:
                 set_domain=self.set_dom_var.get() if not auto else False,
                 domain=self.domain_ent.get(),
                 vpconfigure_repo_url=self.vpconfigure_repo_ent.get(),
-                set_wg=self.set_wg_var.get(),
-                wg_port=_parse_int(self.wg_port, d.WG_PORT_DEFAULT),
-                wg_client_network=self.wg_net.get(),
-                wg_cert=self.wg_cert.get(),
-                wg_conf=self.wg_conf.get(),
-                wg_server_private_key=self.wg_server_priv.get(),
+                set_vpserver=self.set_vpserver_var.get(),
+                vp_service_type=self.vp_service_type_var.get(),
+                vp_port=_parse_int(self.vp_port, d.VP_PORT_DEFAULT),
+                vp_client_network=self.wg_net.get(),
+                vp_cert=self.wg_cert.get(),
+                vp_conf=self.wg_conf.get(),
+                vp_server_private_key=self.wg_server_priv.get(),
                 set_mt=self.set_mt_var.get(),
                 mt_port=_parse_int(self.mt_port, d.MTPROXY_PORT_DEFAULT),
                 mtproxy_secret=self.mtproxy_secret_ent.get(),
